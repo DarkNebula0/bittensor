@@ -49,13 +49,13 @@ from .metagraph import MetagraphCommand
 from .list import ListCommand
 from .misc import UpdateCommand, AutocompleteCommand
 from .profile import (
-    ProfileCommand,
+    ProfileCreateCommand,
     ProfileListCommand,
     ProfileShowCommand,
     ProfileDeleteCommand,
     ProfileSetValueCommand,
     ProfileDeleteValueCommand,
-    ProfileSetCommand,
+    ProfileUseCommand,
 )
 
 from .senate import (

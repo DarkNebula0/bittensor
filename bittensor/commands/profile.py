@@ -9,6 +9,7 @@ from rich.table import Table
 
 # Bittensor
 import bittensor
+from utils.logger import log_error_with_exception, log_error, log_info, log_warning
 
 # Local
 from ..defaults import defaults
@@ -21,34 +22,13 @@ SAVED_ATTRIBUTES = {
 }
 
 
-def handle_error(message, exception):
-    bittensor.__console__.print(f":cross_mark: [red]{message}[/red]:[bold white] {exception}")
-
-
-def log_info(message):
-    bittensor.__console__.print(f":white_check_mark: [bold green]{message}[/bold green]")
-
-
-def log_warning(message):
-    bittensor.__console__.print(f":warning: [yellow]{message}[/yellow]")
-
-
-def log_error(message):
-    bittensor.__console__.print(f":cross_mark: [red]{message}[/red]")
-
-
 def list_profiles(path):
     try:
         os.makedirs(path, exist_ok=True)
+        files = os.listdir(path)
+        profiles = [profileFile for profileFile in files if profileFile.endswith(".yml")]
     except Exception as e:
-        handle_error("Failed to list profiles", e)
-        return []
-
-    try:
-        profiles = os.listdir(path)
-        profiles = [profile for profile in profiles if profile.endswith(".yaml") or profile.endswith(".yml")]
-    except Exception as e:
-        handle_error("Failed to list profiles", e)
+        log_error_with_exception("Failed to list profiles", e)
         return []
 
     if not profiles:
@@ -91,7 +71,7 @@ def get_profile_file_path(path, profile_name):
         if profile.startswith(profile_base_name):
             return os.path.join(path, profile)
 
-    handle_error(f"Profile {profile_name} not found in {path}", None)
+    log_error_with_exception(f"Profile {profile_name} not found in {path}", None)
     return None
 
 
@@ -131,11 +111,11 @@ def open_profile(cli, action, include_none_option=False):
         contents = yaml.safe_load(config_content)
         return config, profile_path, contents
     except Exception as e:
-        handle_error("Failed to read profile", e)
+        log_error_with_exception("Failed to read profile", e)
         return config, None, None
 
 
-class ProfileCommand:
+class ProfileCreateCommand:
     """
     Executes the ``create`` command.
 
@@ -150,7 +130,7 @@ class ProfileCommand:
             subtensor: "bittensor.subtensor" = bittensor.subtensor(
                 config=cli.config, log_verbose=False
             )
-            ProfileCommand._run(cli, subtensor)
+            ProfileCreateCommand._run(cli, subtensor)
         finally:
             if "subtensor" in locals():
                 subtensor.close()
@@ -191,7 +171,7 @@ class ProfileCommand:
                 if attribute == "network" and config.subtensor.chain_endpoint is bittensor.__finney_entrypoint__:
                     (_, config.subtensor.chain_endpoint) = subtensor.determine_chain_endpoint_and_network(
                         config.subtensor.network)
-        ProfileCommand._write_profile(config)
+        ProfileCreateCommand._write_profile(config)
 
     @staticmethod
     def _write_profile(config: "bittensor.config"):
@@ -199,7 +179,7 @@ class ProfileCommand:
         try:
             os.makedirs(path, exist_ok=True)
         except Exception as e:
-            handle_error("Failed to write profile", e)
+            log_error_with_exception("Failed to write profile", e)
             return
 
         if os.path.exists(f"{path}{config.profile.name}.yml") and not config.no_prompt:
@@ -227,7 +207,7 @@ class ProfileCommand:
             with open(f"{path}{config.profile.name}.yml", "w+") as f:
                 f.write(str(profile))
         except Exception as e:
-            handle_error("Failed to write profile", e)
+            log_error_with_exception("Failed to write profile", e)
             return
 
         log_info(f"Profile {config.profile.name} written to {path}")
@@ -239,7 +219,7 @@ class ProfileCommand:
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
         profile_parser = parser.add_parser("create", help="""Create profile""")
-        profile_parser.set_defaults(func=ProfileCommand.run)
+        profile_parser.set_defaults(func=ProfileCreateCommand.run)
         profile_parser.add_argument(
             "--profile.name",
             type=str,
@@ -266,6 +246,7 @@ class ProfileListCommand:
         path = os.path.expanduser(cli.config.profile.path)
         profiles = list_profiles(path)
         if not profiles:
+            # Error message already printed in list_profiles
             return
 
         profile_content = []
@@ -277,7 +258,7 @@ class ProfileListCommand:
                 profile_content.append(
                     (" ", str(config['profile']['name']), str(config['subtensor']['network']), str(config['netuid'])))
             except Exception as e:
-                handle_error("Failed to read profile", e)
+                log_error_with_exception("Failed to read profile", e)
                 continue
 
         table = Table(show_footer=True, width=cli.config.get("width", None), pad_edge=True, box=None, show_edge=True)
@@ -359,7 +340,7 @@ class ProfileDeleteCommand:
             os.remove(profile_path)
             log_info(f"Profile {config.profile.name} deleted from {os.path.expanduser(config.profile.path)}")
         except Exception as e:
-            handle_error("Failed to delete profile", e)
+            log_error_with_exception("Failed to delete profile", e)
 
     @staticmethod
     def check_config(config: "bittensor.config"):
@@ -384,6 +365,7 @@ class ProfileSetValueCommand:
         config, profile_path, contents = open_profile(cli, "set_value")
 
         if profile_path is None:
+            # Error message already printed in open_profile
             return
 
         # Parse the new value from the arguments
@@ -399,7 +381,7 @@ class ProfileSetValueCommand:
             with open(profile_path, "w") as f:
                 yaml.safe_dump(contents, f)
         except Exception as e:
-            handle_error("Failed to write profile", e)
+            log_error_with_exception("Failed to write profile", e)
 
     @staticmethod
     def _set_value(contents, key, value):
@@ -437,6 +419,7 @@ class ProfileDeleteValueCommand:
         config, profile_path, contents = open_profile(cli, "delete_value")
 
         if profile_path is None:
+            # Error message already printed in open_profile
             return
 
         for arg in cli.config.args:
@@ -450,7 +433,7 @@ class ProfileDeleteValueCommand:
             with open(profile_path, "w") as f:
                 yaml.safe_dump(contents, f)
         except Exception as e:
-            handle_error("Failed to write profile", e)
+            log_error_with_exception("Failed to write profile", e)
 
     @staticmethod
     def _remove_key(contents, key):
@@ -474,7 +457,7 @@ class ProfileDeleteValueCommand:
         profile_parser.add_argument("args", nargs=argparse.REMAINDER, help="The keys to delete")
 
 
-class ProfileSetCommand:
+class ProfileUseCommand:
     @staticmethod
     def run(cli):
         config, profile_path, contents = open_profile(cli, "set", True)
@@ -497,7 +480,7 @@ class ProfileSetCommand:
                     generic_config_path = config_file_yml
 
             if not generic_config_path:
-                handle_error("Failed to read generic config", None)
+                log_error_with_exception("Failed to read generic config", None)
                 return
 
             if not generic_config:
@@ -513,7 +496,7 @@ class ProfileSetCommand:
 
             log_info(f"Profile {config.profile.name} set as active.")
         except Exception as e:
-            handle_error("Failed to set active profile", e)
+            log_error_with_exception("Failed to set active profile", e)
 
     @staticmethod
     def check_config(config: "bittensor.config"):
@@ -521,8 +504,8 @@ class ProfileSetCommand:
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
-        profile_parser = parser.add_parser("set", help="""Set active profile""")
-        profile_parser.set_defaults(func=ProfileSetCommand.run)
-        profile_parser.add_argument("--profile.name", type=str, help="The name of the profile to set as active")
+        profile_parser = parser.add_parser("use", help="""Use active profile""")
+        profile_parser.set_defaults(func=ProfileUseCommand.run)
+        profile_parser.add_argument("--profile.name", type=str, help="The name of the profile to use")
         profile_parser.add_argument("--profile.path", type=str, default=defaults.profile.path,
                                     help="The path to the profile directory")
