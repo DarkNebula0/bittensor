@@ -9,17 +9,11 @@ from rich.table import Table
 
 # Bittensor
 import bittensor
-from utils.logger import log_error_with_exception, log_error, log_info, log_warning
+from ..utils.logger import log_error_with_exception, log_error, log_info, log_warning
+from ..utils.data import unflatten_dict, flatten_dict
 
 # Local
 from ..defaults import defaults
-
-SAVED_ATTRIBUTES = {
-    "profile": ["name"],
-    "subtensor": ["network", "chain_endpoint"],
-    "wallet": ["name", "hotkey", "path"],
-    "netuid": True,
-}
 
 
 def list_profiles(path):
@@ -38,34 +32,10 @@ def list_profiles(path):
     return profiles
 
 
-def ask_for_profile(profiles, action, include_none=False):
-    profiles_without_extension = [profile.replace('.yml', '').replace('.yaml', '') for profile in profiles]
-
-    # Add 'None' as an option if include_none is True
-    if include_none:
-        profiles_without_extension.insert(0, 'None')
-
-    # If we have no profiles, return None
-    if len(profiles_without_extension) == 0:
-        return None
-
-    default_choice = 'None' if include_none else profiles_without_extension[0]
-    profile_name = Prompt.ask(
-        f"Enter profile name to {action}",
-        choices=profiles_without_extension,
-        default=default_choice
-    )
-
-    if profile_name == 'None':
-        return None
-
-    return profile_name + ('.yml' if profile_name + '.yml' in profiles else '.yaml')
-
-
 def get_profile_file_path(path, profile_name):
     """Return the profile file path with the correct extension."""
     profiles = list_profiles(path)
-    profile_base_name = profile_name.replace('.yml', '').replace('.yaml', '')
+    profile_base_name = profile_name.replace('.yml', '')
 
     for profile in profiles:
         if profile.startswith(profile_base_name):
@@ -75,106 +45,68 @@ def get_profile_file_path(path, profile_name):
     return None
 
 
-def get_profile_path_from_config(cli, action, include_none_option=False):
-    """Extract profile path from config and handle user prompt if necessary."""
-    config = cli.config.copy()
+def get_profile_path_from_config(cli):
+    """Extract profile path from config"""
+    config = cli.config
     path = os.path.expanduser(config.profile.path)
-
-    if not (config.is_set("profile.name") and config.profile.name != config.profile.active) and not config.no_prompt:
-        profiles = list_profiles(path)
-        if not profiles:
-            return None, None
-
-        profile_name = ask_for_profile(profiles, action, include_none_option)
-        config.profile.name = str(profile_name)
-
-    profile_name = config.profile.name
-
-    if include_none_option and profile_name == 'None':
-        return config, None
-
-    profile_path = get_profile_file_path(path, profile_name)
-
-    return config, profile_path
+    return get_profile_file_path(path, config.profile.name)
 
 
-def open_profile(cli, action, include_none_option=False):
+def open_profile(cli):
     """Open a profile and return its configuration and contents."""
-    config, profile_path = get_profile_path_from_config(cli, action, include_none_option)
+    profile_path = get_profile_path_from_config(cli)
 
     if profile_path is None:
-        return config, None, None
+        return None, None
 
     try:
         with open(profile_path, "r") as f:
             config_content = f.read()
         contents = yaml.safe_load(config_content)
-        return config, profile_path, contents
+        return profile_path, contents
     except Exception as e:
         log_error_with_exception("Failed to read profile", e)
-        return config, None, None
+        return None, None
 
 
 class ProfileCreateCommand:
     """
     Executes the ``create`` command.
 
-    This class provides functionality to create a profile by prompting the user to enter various attributes.
+    This class provides functionality to create a profile by using the provided command-line arguments.
     The entered attributes are then written to a profile file.
 
     """
 
     @staticmethod
     def run(cli):
-        try:
-            subtensor: "bittensor.subtensor" = bittensor.subtensor(
-                config=cli.config, log_verbose=False
-            )
-            ProfileCreateCommand._run(cli, subtensor)
-        finally:
-            if "subtensor" in locals():
-                subtensor.close()
-                bittensor.logging.debug("closing subtensor connection")
+        ProfileCreateCommand._run(cli)
 
     @staticmethod
-    def _run(cli: "bittensor.cli", subtensor: "bittensor.subtensor"):
-        config = cli.config.copy()
-        for (key, attributes) in SAVED_ATTRIBUTES.items():
-            # if attributes isn't a list then just raw values
-            if not isinstance(attributes, list):
-                if config.no_prompt:
-                    continue
-                setattr(
-                    config,
-                    key,
-                    Prompt.ask(
-                        f"Enter {key}",
-                        default=getattr(config, key, None)
-                    ),
-                )
-                continue
-            sub_attr = getattr(config, key, None)
-            for attribute in attributes:
-                if config.no_prompt:
-                    continue
-                attr_key = f"{key}.{attribute}"
-                setattr(
-                    config[key],
-                    attribute,
-                    Prompt.ask(
-                        f"Enter {attr_key}",
-                        choices=None if attribute != "network" else bittensor.__networks__,
-                        default=getattr(sub_attr, attribute, None),
-                    ),
-                )
-                # Set the chain_endpoint to match the network unless user defined.
-                if attribute == "network" and config.subtensor.chain_endpoint is bittensor.__finney_entrypoint__:
-                    (_, config.subtensor.chain_endpoint) = subtensor.determine_chain_endpoint_and_network(
-                        config.subtensor.network)
-        ProfileCreateCommand._write_profile(config)
+    def _run(cli: "bittensor.cli"):
+        parsed_params = {}
+        values = cli.config.get("values")
+
+        if not values:
+            log_error(
+                "No key-value pairs provided. Please provide --values key=value key=value ... pairs to set in the "
+                "profile file.")
+            return
+
+        for arg in values:
+            if '=' in arg:
+                key, value = arg.split('=', 1)
+                parsed_params[key] = value
+
+        if not parsed_params.__sizeof__() > 0:
+            log_error("Invalid values provided. Please provide --values key=value key=value ... pairs to set in the "
+                      "profile file.")
+            return
+
+        ProfileCreateCommand._write_profile(cli.config, unflatten_dict(parsed_params))
 
     @staticmethod
-    def _write_profile(config: "bittensor.config"):
+    def _write_profile(config: "bittensor.config", content):
         path = os.path.expanduser(config.profile.path)
         try:
             os.makedirs(path, exist_ok=True)
@@ -182,7 +114,8 @@ class ProfileCreateCommand:
             log_error_with_exception("Failed to write profile", e)
             return
 
-        if os.path.exists(f"{path}{config.profile.name}.yml") and not config.no_prompt:
+        profile_file = f"{path}{config.profile.name}.yml"
+        if os.path.exists(profile_file) and not config.no_prompt:
             overwrite = None
             while overwrite not in ["y", "n"]:
                 overwrite = Prompt.ask(f"Profile {config.profile.name} already exists. Overwrite?")
@@ -192,20 +125,9 @@ class ProfileCreateCommand:
                 log_error("Failed to write profile: User denied.")
                 return
 
-        profile = bittensor.config()
-        # Create a profile clone with only the saved attributes
-        for key in SAVED_ATTRIBUTES.keys():
-            if isinstance(SAVED_ATTRIBUTES[key], list):
-                getattr(profile, key, None)
-                profile[key] = bittensor.config()
-                for attribute in SAVED_ATTRIBUTES[key]:
-                    setattr(profile[key], attribute, getattr(config[key], attribute))
-            else:
-                setattr(profile, key, getattr(config, key))
-
         try:
-            with open(f"{path}{config.profile.name}.yml", "w+") as f:
-                f.write(str(profile))
+            with open(profile_file, "w+") as file:
+                yaml.safe_dump(content, file)
         except Exception as e:
             log_error_with_exception("Failed to write profile", e)
             return
@@ -214,7 +136,12 @@ class ProfileCreateCommand:
 
     @staticmethod
     def check_config(config: "bittensor.config"):
-        return config is not None
+        profile = config.get("profile", {})
+        name = profile.get("name")
+        path = profile.get("path")
+        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
+        # Is there any case where this function is useful?
+        return name is not None and path is not None
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
@@ -232,8 +159,8 @@ class ProfileCreateCommand:
             default=defaults.profile.path,
             help="The path to the profile directory",
         )
-        bittensor.subtensor.add_args(profile_parser)
-        bittensor.wallet.add_args(profile_parser)
+        profile_parser.add_argument("--values", nargs=argparse.REMAINDER,
+                                    help="The key=value pairs to set in the profile file")
 
 
 class ProfileListCommand:
@@ -243,7 +170,9 @@ class ProfileListCommand:
 
     @staticmethod
     def _run(cli: "bittensor.cli"):
-        path = os.path.expanduser(cli.config.profile.path)
+        config = cli.config
+        active_profile = config.profile.active
+        path = os.path.expanduser(config.profile.path)
         profiles = list_profiles(path)
         if not profiles:
             # Error message already printed in list_profiles
@@ -251,22 +180,17 @@ class ProfileListCommand:
 
         profile_content = []
         for profile in profiles:
-            try:
-                with open(f"{path}/{profile}", "r") as f:
-                    config_content = f.read()
-                config = yaml.safe_load(config_content)
-                profile_content.append(
-                    (" ", str(config['profile']['name']), str(config['subtensor']['network']), str(config['netuid'])))
-            except Exception as e:
-                log_error_with_exception("Failed to read profile", e)
-                continue
+            profile_name = profile.replace('.yml', '')
+            if profile_name == active_profile:
+                profile_content.append(["*", profile_name])
+            else:
+                profile_content.append(["", profile_name])
 
         table = Table(show_footer=True, width=cli.config.get("width", None), pad_edge=True, box=None, show_edge=True)
         table.title = "[white]Profiles"
-        table.add_column("A", style="red", justify="center", min_width=1)
-        table.add_column("Name", style="white", justify="center", min_width=10)
-        table.add_column("Network", style="white", justify="center", min_width=10)
-        table.add_column("Netuid", style="white", justify="center", min_width=10)
+        table.add_column("Active", style="red", justify="center", min_width=1)
+        table.add_column("Name", style="white", justify="left", min_width=20)
+
         for profile in profile_content:
             table.add_row(*profile)
 
@@ -274,7 +198,11 @@ class ProfileListCommand:
 
     @staticmethod
     def check_config(config: "bittensor.config"):
-        return config is not None
+        profile = config.get("profile", {})
+        path = profile.get("path")
+        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
+        # Is there any case where this function is useful?
+        return path is not None
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
@@ -291,7 +219,8 @@ class ProfileShowCommand:
 
     @staticmethod
     def _run(cli: "bittensor.cli"):
-        config, _profile_path, contents = open_profile(cli, "show")
+        config = cli.config
+        _profile_path, contents = open_profile(cli)
 
         if contents is None:
             # Error message already printed in get_profile_file_path
@@ -299,20 +228,23 @@ class ProfileShowCommand:
 
         table = Table(show_footer=True, width=cli.config.get("width", None), pad_edge=True, box=None, show_edge=True)
         table.title = f"[white]Profile [bold white]{config.profile.name}"
-        table.add_column("[overline white]PARAMETERS", style="bold white", justify="left", min_width=10)
-        table.add_column("[overline white]VALUES", style="green", justify="left", min_width=10)
-        for key in contents.keys():
-            if isinstance(contents[key], dict):
-                for subkey in contents[key].keys():
-                    table.add_row(f"  [bold white]{key}.{subkey}", f"[green]{contents[key][subkey]}")
-                continue
-            table.add_row(f"  [bold white]{key}", f"[green]{contents[key]}")
+        table.add_column("[overline white]PARAMETERS", style="bold white", justify="left", min_width=15)
+        table.add_column("[overline white]VALUES", style="green", justify="left", min_width=20)
+        flat_contents = flatten_dict(contents)
+
+        for key in flat_contents:
+            table.add_row(f"  [bold white]{key}", f"[green]{flat_contents[key]}")
 
         bittensor.__console__.print(table)
 
     @staticmethod
     def check_config(config: "bittensor.config"):
-        return config is not None
+        profile = config.get("profile", {})
+        name = profile.get("name")
+        path = profile.get("path")
+        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
+        # Is there any case where this function is useful?
+        return name is not None and path is not None
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
@@ -330,7 +262,8 @@ class ProfileDeleteCommand:
 
     @staticmethod
     def _run(cli: "bittensor.cli"):
-        config, profile_path = get_profile_path_from_config(cli, "delete")
+        config = cli.config
+        profile_path = get_profile_path_from_config(cli)
 
         if profile_path is None:
             # Error message already printed in get_profile_file_path
@@ -344,7 +277,12 @@ class ProfileDeleteCommand:
 
     @staticmethod
     def check_config(config: "bittensor.config"):
-        return config is not None
+        profile = config.get("profile", {})
+        name = profile.get("name")
+        path = profile.get("path")
+        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
+        # Is there any case where this function is useful?
+        return name is not None and path is not None
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
@@ -362,14 +300,22 @@ class ProfileSetValueCommand:
 
     @staticmethod
     def _run(cli: "bittensor.cli"):
-        config, profile_path, contents = open_profile(cli, "set_value")
+        config = cli.config
+        profile_path, contents = open_profile(cli)
+        values = cli.config.get("values")
+
+        if not values:
+            log_error(
+                "No key-value pairs provided. Please provide --values key=value key=value ... pairs to set in the "
+                "profile file.")
+            return
 
         if profile_path is None:
             # Error message already printed in open_profile
             return
 
         # Parse the new value from the arguments
-        for arg in cli.config.args:
+        for arg in values:
             if "=" in arg:
                 key, value = arg.split("=")
                 if ProfileSetValueCommand._set_value(contents, key, value):
@@ -397,7 +343,12 @@ class ProfileSetValueCommand:
 
     @staticmethod
     def check_config(config: "bittensor.config"):
-        return config is not None
+        profile = config.get("profile", {})
+        name = profile.get("name")
+        path = profile.get("path")
+        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
+        # Is there any case where this function is useful?
+        return name is not None and path is not None
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
@@ -406,7 +357,7 @@ class ProfileSetValueCommand:
         profile_parser.add_argument("--profile.name", type=str, help="The name of the profile to update")
         profile_parser.add_argument("--profile.path", type=str, default=defaults.profile.path,
                                     help="The path to the profile directory")
-        profile_parser.add_argument("args", nargs=argparse.REMAINDER, help="The key-value pairs to set or update")
+        profile_parser.add_argument("--values", nargs=argparse.REMAINDER, help="The key=value pairs to set or update")
 
 
 class ProfileDeleteValueCommand:
@@ -416,36 +367,43 @@ class ProfileDeleteValueCommand:
 
     @staticmethod
     def _run(cli: "bittensor.cli"):
-        config, profile_path, contents = open_profile(cli, "delete_value")
+        config = cli.config
+        profile_path, contents = open_profile(cli)
+        values = cli.config.get("values")
+
+        if not values:
+            log_error(
+                "No keys provided. Please provide --values key key ... to delete from the profile file.")
+            return
 
         if profile_path is None:
             # Error message already printed in open_profile
             return
 
-        for arg in cli.config.args:
+        flatten_contents = flatten_dict(contents)
+
+        for arg in values:
             key = arg
-            if ProfileDeleteValueCommand._remove_key(contents, key):
+            if flatten_contents.__contains__(key):
+                del flatten_contents[key]
                 log_info(f"Variable {key} was removed from profile {config.profile.name}")
             else:
                 log_warning(f"Variable {key} does not exist in profile {config.profile.name}")
 
         try:
             with open(profile_path, "w") as f:
-                yaml.safe_dump(contents, f)
+                yaml.safe_dump(unflatten_dict(flatten_contents), f)
         except Exception as e:
             log_error_with_exception("Failed to write profile", e)
 
     @staticmethod
-    def _remove_key(contents, key):
-        keys = key.split(".")
-        sub_content = contents
-        for k in keys[:-1]:
-            sub_content = sub_content.get(k, {})
-        return sub_content.pop(keys[-1], None) is not None
-
-    @staticmethod
     def check_config(config: "bittensor.config"):
-        return config is not None
+        profile = config.get("profile", {})
+        name = profile.get("name")
+        path = profile.get("path")
+        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
+        # Is there any case where this function is useful?
+        return name is not None and path is not None
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
@@ -454,13 +412,14 @@ class ProfileDeleteValueCommand:
         profile_parser.add_argument("--profile.name", type=str, help="The name of the profile to update")
         profile_parser.add_argument("--profile.path", type=str, default=defaults.profile.path,
                                     help="The path to the profile directory")
-        profile_parser.add_argument("args", nargs=argparse.REMAINDER, help="The keys to delete")
+        profile_parser.add_argument("--values", nargs=argparse.REMAINDER, help="The keys to delete")
 
 
 class ProfileUseCommand:
     @staticmethod
     def run(cli):
-        config, profile_path, contents = open_profile(cli, "set", True)
+        config = cli.config
+        profile_path, _contents = open_profile(cli)
 
         # Load generic config file and write active profile to it
         config_path = defaults.config.path
@@ -500,7 +459,12 @@ class ProfileUseCommand:
 
     @staticmethod
     def check_config(config: "bittensor.config"):
-        return config is not None
+        profile = config.get("profile", {})
+        name = profile.get("name")
+        path = profile.get("path")
+        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
+        # Is there any case where this function is useful?
+        return name is not None and path is not None
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):

@@ -28,6 +28,8 @@ from copy import deepcopy
 from munch import DefaultMunch
 from typing import List, Optional, Dict, Any, TypeVar, Type
 import argparse
+
+from .utils.data import unflatten_dict
 from .defaults import defaults
 
 
@@ -245,13 +247,13 @@ class config(DefaultMunch):
         self.load_active_profile()
 
         # Merge all configs together and update self
-        defaults_and_env = self.deep_merge(defaults.__dict__, config.unflatten_dict(self.env_config))
+        defaults_and_env = self.deep_merge(defaults.__dict__, unflatten_dict(self.env_config))
 
         generic_and_profile = self.deep_merge(self.generic_config, self.profile_config)
 
-        merged_config = self.deep_merge(config.unflatten_dict(defaults_and_env),
-                                        self.deep_merge(config.unflatten_dict(generic_and_profile),
-                                                        config.unflatten_dict(params_no_defaults.__dict__)))
+        merged_config = self.deep_merge(unflatten_dict(defaults_and_env),
+                                        self.deep_merge(unflatten_dict(generic_and_profile),
+                                                        unflatten_dict(params_no_defaults.__dict__)))
 
         self.merge(merged_config)
 
@@ -275,21 +277,6 @@ class config(DefaultMunch):
             if len(keys) == 1:
                 head[keys[0]] = arg_val
 
-    @staticmethod
-    def unflatten_dict(flat_dict):
-        """Convert a flat dictionary with dot-separated keys to a nested dictionary."""
-        nested_dict = {}
-
-        for key, value in flat_dict.items():
-            keys = key.split(".")
-            d = nested_dict
-            for part in keys[:-1]:
-                if part not in d:
-                    d[part] = {}
-                d = d[part]
-            d[keys[-1]] = value
-
-        return nested_dict
 
     def __parse_args__(
             self,
