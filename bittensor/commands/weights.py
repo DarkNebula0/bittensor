@@ -28,7 +28,7 @@ from rich.prompt import Prompt, Confirm
 
 import bittensor
 import bittensor.utils.weight_utils as weight_utils
-from .. import defaults  # type: ignore
+from . import defaults  # type: ignore
 
 
 class CommitWeightCommand:

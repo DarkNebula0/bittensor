@@ -17,7 +17,7 @@
 
 import argparse
 import bittensor
-from ..defaults import defaults
+from . import defaults
 from rich.prompt import Prompt
 from rich.table import Table
 from typing import List, Optional, Dict

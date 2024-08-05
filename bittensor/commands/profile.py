@@ -13,7 +13,7 @@ from ..utils.logger import log_error_with_exception, log_error, log_info, log_wa
 from ..utils.data import unflatten_dict, flatten_dict
 
 # Local
-from ..defaults import defaults
+from . import defaults
 
 
 def list_profiles(path):
@@ -314,32 +314,24 @@ class ProfileSetValueCommand:
             # Error message already printed in open_profile
             return
 
+        flatten_contents = flatten_dict(contents)
+
         # Parse the new value from the arguments
         for arg in values:
             if "=" in arg:
                 key, value = arg.split("=")
-                if ProfileSetValueCommand._set_value(contents, key, value):
+                if flatten_contents.__contains__(key):
                     log_info(f"Variable {key} was updated to {value} in profile {config.profile.name}")
                 else:
                     log_info(f"Variable {key} was created with value {value} in profile {config.profile.name}")
 
+                flatten_contents[key] = value
+
         try:
             with open(profile_path, "w") as f:
-                yaml.safe_dump(contents, f)
+                yaml.safe_dump(unflatten_dict(flatten_contents), f)
         except Exception as e:
             log_error_with_exception("Failed to write profile", e)
-
-    @staticmethod
-    def _set_value(contents, key, value):
-        keys = key.split(".")
-        sub_content = contents
-        for k in keys[:-1]:
-            if k not in sub_content:
-                sub_content[k] = {}
-            sub_content = sub_content[k]
-        updated = keys[-1] in sub_content
-        sub_content[keys[-1]] = value
-        return updated
 
     @staticmethod
     def check_config(config: "bittensor.config"):
@@ -421,37 +413,14 @@ class ProfileUseCommand:
         config = cli.config
         profile_path, _contents = open_profile(cli)
 
-        # Load generic config file and write active profile to it
-        config_path = defaults.config.path
-        config_file_yaml = os.path.expanduser(os.path.join(config_path, "btcliconfig.yaml"))
-        config_file_yml = os.path.expanduser(os.path.join(config_path, "btcliconfig.yml"))
+        if profile_path is None:
+            # Error message already printed in open_profile
+            return
 
         try:
-            generic_config = None
-            generic_config_path = None
-            if os.path.exists(config_file_yaml):
-                with open(config_file_yaml, 'r') as file:
-                    generic_config = yaml.safe_load(file)
-                    generic_config_path = config_file_yaml
-            elif os.path.exists(config_file_yml):
-                with open(config_file_yml, 'r') as file:
-                    generic_config = yaml.safe_load(file)
-                    generic_config_path = config_file_yml
-
-            if not generic_config_path:
-                log_error_with_exception("Failed to read generic config", None)
-                return
-
-            if not generic_config:
-                generic_config = {'profile': {'active': ''}}
-
-            if profile_path is None:
-                generic_config['profile']['active'] = ''
-            else:
-                generic_config['profile']['active'] = config.profile.name.replace('.yml', '').replace('.yaml', '')
-
-            with open(generic_config_path, 'w+') as file:
-                yaml.safe_dump(generic_config, file)
+            file_path = os.path.join(os.path.expanduser(config.profile.path), '.btcliprofile')
+            with open(file_path, 'w+') as file:
+                file.write(config.profile.name)
 
             log_info(f"Profile {config.profile.name} set as active.")
         except Exception as e:
@@ -464,12 +433,13 @@ class ProfileUseCommand:
         path = profile.get("path")
         # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
         # Is there any case where this function is useful?
-        return name is not None and path is not None
+        return name is not None or path is not None
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
         profile_parser = parser.add_parser("use", help="""Use active profile""")
         profile_parser.set_defaults(func=ProfileUseCommand.run)
-        profile_parser.add_argument("--profile.name", type=str, help="The name of the profile to use")
+        profile_parser.add_argument("--profile.name", type=str, help="The name of the profile to use",
+                                    default=defaults.profile.name)
         profile_parser.add_argument("--profile.path", type=str, default=defaults.profile.path,
                                     help="The path to the profile directory")

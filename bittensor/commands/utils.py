@@ -25,7 +25,7 @@ from bittensor.utils import U64_NORMALIZED_FLOAT, U16_NORMALIZED_FLOAT
 from typing import List, Dict, Any, Optional, Tuple
 from rich.prompt import Confirm, PromptBase
 from dataclasses import dataclass
-from ..defaults import defaults
+from . import defaults
 
 console = bittensor.__console__
 

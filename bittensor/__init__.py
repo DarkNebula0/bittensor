@@ -22,7 +22,6 @@ import warnings
 from rich.console import Console
 from rich.traceback import install
 
-
 if (NEST_ASYNCIO_ENV := os.getenv("NEST_ASYNCIO")) in ("1", None):
     if NEST_ASYNCIO_ENV is None:
         warnings.warn(
@@ -38,9 +37,8 @@ if (NEST_ASYNCIO_ENV := os.getenv("NEST_ASYNCIO")) in ("1", None):
 
     nest_asyncio.apply()
 
-
 # Bittensor code and protocol version.
-__version__ = "7.2.0"
+__version__ = "7.3.0"
 
 _version_split = __version__.split(".")
 __version_info__ = tuple(int(part) for part in _version_split)
@@ -48,9 +46,9 @@ _version_int_base = 1000
 assert max(__version_info__) < _version_int_base
 
 __version_as_int__: int = sum(
-    e * (_version_int_base**i) for i, e in enumerate(reversed(__version_info__))
+    e * (_version_int_base ** i) for i, e in enumerate(reversed(__version_info__))
 )
-assert __version_as_int__ < 2**31  # fits in int32
+assert __version_as_int__ < 2 ** 31  # fits in int32
 __new_signature_version__ = 360
 
 # Rich console.
@@ -229,6 +227,37 @@ __type_registry__ = {
         "SubnetRegistrationRuntimeApi": {
             "methods": {"get_network_registration_cost": {"params": [], "type": "u64"}}
         },
+        "ColdkeySwapRuntimeApi": {
+            "methods": {
+                "get_scheduled_coldkey_swap": {
+                    "params": [
+                        {
+                            "name": "coldkey_account_vec",
+                            "type": "Vec<u8>",
+                        },
+                    ],
+                    "type": "Vec<u8>",
+                },
+                "get_remaining_arbitration_period": {
+                    "params": [
+                        {
+                            "name": "coldkey_account_vec",
+                            "type": "Vec<u8>",
+                        },
+                    ],
+                    "type": "Vec<u8>",
+                },
+                "get_coldkey_swap_destinations": {
+                    "params": [
+                        {
+                            "name": "coldkey_account_vec",
+                            "type": "Vec<u8>",
+                        },
+                    ],
+                    "type": "Vec<u8>",
+                },
+            }
+        },
     },
 }
 
@@ -337,6 +366,10 @@ from .mock.wallet_mock import MockWallet as MockWallet
 
 from .subnets import SubnetsAPI as SubnetsAPI
 
+# TODO: Do we still need this? This is a really bad way to do this. We currently re initializing the config for every
+#  entry in this list. And create a parser with an empty arguments to merge the defaults on it. (login env, profile,
+#  ...) and then merging them all together. Maybe a better way would be to export a constant with the configs directly.
+#  Why initializing a parser and the config class in the first place?
 configs = [
     axon.config(),
     subtensor.config(),
@@ -344,9 +377,4 @@ configs = [
     wallet.config(),
     logging.get_config(),
 ]
-
-from .defaults import defaults as bittensor_defaults
-# TODO: Check single configs with the defaults
-# Do we still need the merged config?
-defaults = bittensor_defaults
-#defaults = config.merge_all(configs)
+defaults = config.merge_all(configs)

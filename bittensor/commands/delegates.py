@@ -27,7 +27,7 @@ from substrateinterface.exceptions import SubstrateRequestException
 from tqdm import tqdm
 
 import bittensor
-from .. import defaults
+from . import defaults
 from .identity import SetIdentityCommand
 from .utils import get_delegates_details, DelegatesDetails
 

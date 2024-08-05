@@ -31,7 +31,7 @@ from .utils import (
     get_all_wallets_for_path,
     filter_netuids_by_registered_hotkeys,
 )
-from ..defaults import defaults
+from . import defaults
 
 console = bittensor.__console__
 

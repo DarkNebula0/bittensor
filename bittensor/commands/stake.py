@@ -31,7 +31,7 @@ from .utils import (
     get_delegates_details,
     DelegatesDetails,
 )
-from ..defaults import defaults
+from . import defaults
 
 console = bittensor.__console__
 

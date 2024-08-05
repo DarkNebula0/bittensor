@@ -29,8 +29,8 @@ from munch import DefaultMunch
 from typing import List, Optional, Dict, Any, TypeVar, Type
 import argparse
 
-from .utils.data import unflatten_dict
-from .defaults import defaults
+import bittensor
+from .utils.data import unflatten_dict, flatten_dict
 
 
 class InvalidConfigFile(Exception):
@@ -225,37 +225,54 @@ class config(DefaultMunch):
             args=args, parser=parser_no_defaults, strict=strict
         )
 
-        ## Diff the params and params_no_defaults to get the is_set map
-        _config["__is_set"] = {
-            arg_key: True
-            for arg_key in [
-                k
-                for k, _ in filter(
-                    lambda kv: kv[1] != argparse.SUPPRESS,
-                    params_no_defaults.__dict__.items(),
-                )
-            ]
-        }
+        # TODO: Where to store defaults? __init__ defaults are not usable here because of circular imports
+        self.merge({
+            "profile": {
+                "path": "~/.bittensor/profiles/"
+            },
+            "config": {
+                "path": "~/.bittensor/"
+            },
+        })
 
         # Load config from environment variables and merge with defaults values
         self.load_config_from_env_vars()
 
         # Load or create generic config
-        self.load_or_create_generic_config()
+        self.load_generic_config()
+        defaults_and_env = self.deep_merge(unflatten_dict(default_params.__dict__), unflatten_dict(self.env_config))
+
+        # Merge env vars with current config to load the profile
+        self.merge(defaults_and_env)
 
         # Load active profile if we have one
         self.load_active_profile()
 
-        # Merge all configs together and update self
-        defaults_and_env = self.deep_merge(defaults.__dict__, unflatten_dict(self.env_config))
-
         generic_and_profile = self.deep_merge(self.generic_config, self.profile_config)
 
-        merged_config = self.deep_merge(unflatten_dict(defaults_and_env),
+        merged_config = self.deep_merge(defaults_and_env,
                                         self.deep_merge(unflatten_dict(generic_and_profile),
                                                         unflatten_dict(params_no_defaults.__dict__)))
 
         self.merge(merged_config)
+
+        # Built the new is_set map
+        flatten_config = flatten_dict(self.__dict__)
+        tmp_is_set = {}
+
+        for key, _ in flatten_config.items():
+            # If the key exists in the config we set it initially
+            # to True because we have an value and something must have been set
+            tmp_is_set[key] = True
+
+        flat_defaults = flatten_dict(default_params.__dict__)
+        for key, val in flat_defaults.items():
+            # We check if the value in the config is still the default value if yes we set it to False (We do this to
+            # check if the value has been set by the user and when not the command can switch to interactive mode)
+            if key in tmp_is_set and val == flatten_config[key]:
+                tmp_is_set[key] = False
+
+        _config["__is_set"] = tmp_is_set
 
     @staticmethod
     def __split_params__(params: argparse.Namespace, _config: "config"):
@@ -276,7 +293,6 @@ class config(DefaultMunch):
                     keys = keys[1:]
             if len(keys) == 1:
                 head[keys[0]] = arg_val
-
 
     def __parse_args__(
             self,
@@ -440,18 +456,10 @@ class config(DefaultMunch):
         """
         Returns a boolean indicating whether the parameter has been set or is still the default.
         """
-        keys = param_name.split(".")
-        current_value, current_exists = self.get_value(self.__dict__, keys)
-        default_value, _default_exists = self.get_value(defaults, keys)
-
-        print(f"param: {param_name}, current_value: {current_value}, default_value: {default_value}")
-
-        if not current_exists:
-            # The config for this parameter has not been set
+        if param_name not in self.get("__is_set"):
             return False
-
-        # Check if the value is different from the default value if not return False
-        return current_value != default_value
+        else:
+            return self.get("__is_set")[param_name]
 
     def __check_for_missing_required_args(
             self, parser: argparse.ArgumentParser, args: List[str]
@@ -481,68 +489,44 @@ class config(DefaultMunch):
             key = key.replace("_", ".")
             self.env_config[key] = value
 
-    def load_or_create_generic_config(self):
-        config_path = os.path.expanduser(defaults.config.path)
-        config_file_yaml = os.path.join(config_path, "btcliconfig.yaml")
+    def load_generic_config(self):
+        config_path = os.path.expanduser(self.get("config", {}).get("path"))
         config_file_yml = os.path.join(config_path, "btcliconfig.yml")
 
         config_file = None
-        if os.path.exists(config_file_yaml):
-            config_file = config_file_yaml
-        elif os.path.exists(config_file_yml):
+        config_data = {}
+
+        if os.path.exists(config_file_yml):
             config_file = config_file_yml
 
         if config_file:
             with open(config_file, "r") as file:
                 config_data = yaml.safe_load(file)
-        else:
-            config_data = defaults.toDict()
-            # Remove data we don't want to save in the default config, maybe
-            # it's better to use a second define for it and not defaults
-            config_data.pop("config", None)
-            config_data.pop("profile", None)
-            config_data.pop("wallet", None)
-            os.makedirs(config_path, exist_ok=True)
-            with open(config_file_yml, "w+") as file:
-                yaml.safe_dump(config_data, file)
 
-        def flatten_dict(d, parent_key=""):
-            for k, v in d.items():
-                new_key = f"{parent_key}.{k}" if parent_key else k
-                if isinstance(v, dict):
-                    flatten_dict(v, new_key)
-                else:
-                    self.generic_config[new_key] = v
-
-        if not config_data:
-            config_data = {}
-
-        flatten_dict(config_data)
+        if config_data:
+            self.generic_config = flatten_dict(config_data)
 
     def load_active_profile(self):
+        profile_path = self.get("profile", {}).get("path")
 
-        profile_name = (self.params_config.get('profile.active') or
-                        self.env_config.get("profile.active") or
-                        self.generic_config.get("profile.active"))
+        if not profile_path:
+            return
+        profile_name_holder = os.path.expanduser(
+            os.path.join(profile_path, ".btcliprofile")
+        )
 
-        profile_path = (self.params_config.get('profile.path') or
-                        self.env_config.get('profile.path') or
-                        self.generic_config.get('profile.path') or
-                        defaults.profile.path)
-
-        if not profile_name or not profile_path:
+        if not os.path.exists(profile_name_holder):
+            # No profile is active, so we can skip loading the profile
             return
 
-        profile_file_yaml = os.path.expanduser(
-            os.path.join(profile_path, f"{profile_name}.yaml")
-        )
+        with open(profile_name_holder, "r") as file:
+            profile_name = file.read().strip()
+
         profile_file_yml = os.path.expanduser(
             os.path.join(profile_path, f"{profile_name}.yml")
         )
 
-        if os.path.exists(profile_file_yaml):
-            profile_file = profile_file_yaml
-        elif os.path.exists(profile_file_yml):
+        if os.path.exists(profile_file_yml):
             profile_file = profile_file_yml
         else:
             # Maybe we should raise an error here, but for now, I think it's ok if we skip
@@ -552,16 +536,10 @@ class config(DefaultMunch):
 
         with open(profile_file, "r") as file:
             profile_data = yaml.safe_load(file)
+            profile_data["profile.active"] = profile_name
 
-        def flatten_dict(d, parent_key=""):
-            for k, v in d.items():
-                new_key = f"{parent_key}.{k}" if parent_key else k
-                if isinstance(v, dict):
-                    flatten_dict(v, new_key)
-                else:
-                    self.profile_config[new_key] = v
-
-        flatten_dict(profile_data)
+        if profile_data:
+            self.profile_config = flatten_dict(profile_data)
 
 
 T = TypeVar("T", bound="DefaultConfig")
