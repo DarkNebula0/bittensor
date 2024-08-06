@@ -30,7 +30,7 @@ from typing import List, Optional, Dict, Any, TypeVar, Type
 import argparse
 
 import bittensor
-from .utils.data import unflatten_dict, flatten_dict
+from .utils.data import unflatten_dict, flatten_dict, deep_merge
 
 
 class InvalidConfigFile(Exception):
@@ -225,8 +225,7 @@ class config(DefaultMunch):
             args=args, parser=parser_no_defaults, strict=strict
         )
 
-        # TODO: Where to store defaults? __init__ defaults are not usable here because of circular imports
-        self.merge(
+        config_defaults = flatten_dict(
             {
                 "profile": {"path": "~/.bittensor/profiles/"},
                 "config": {"path": "~/.bittensor/"},
@@ -236,37 +235,45 @@ class config(DefaultMunch):
         # Load config from environment variables and merge with defaults values
         self.load_config_from_env_vars()
 
-        # Load or create generic config
-        self.load_generic_config()
-        defaults_and_env = self.deep_merge(
-            unflatten_dict(default_params.__dict__), unflatten_dict(self.env_config)
-        )
+        tmp_config = {
+            **config_defaults,
+            **self.env_config,
+            **flatten_dict(params_no_defaults.__dict__),
+            **self.params_config,
+        }
 
-        # Merge env vars with current config to load the profile
-        self.merge(defaults_and_env)
+        # Load or create generic config
+        self.load_generic_config(tmp_config.get("config.path"))
 
         # Load active profile if we have one
-        self.load_active_profile()
+        self.load_active_profile(tmp_config.get("profile.path"))
 
-        generic_and_profile = self.deep_merge(self.generic_config, self.profile_config)
+        # Merge all the configs overwrite order is -> defaults -> generic -> profile -> env -> params
+        tmp_config = {
+            **flatten_dict(default_params.__dict__),
+            **self.generic_config,
+            **self.profile_config,
+            **self.env_config,
+            **flatten_dict(params_no_defaults.__dict__),
+            **self.params_config,
+        }
 
-        merged_config = self.deep_merge(
-            defaults_and_env,
-            self.deep_merge(
-                unflatten_dict(generic_and_profile),
-                unflatten_dict(params_no_defaults.__dict__),
-            ),
-        )
+        print("Defaults: ", flatten_dict(default_params.__dict__))
+        print("Env config: ", self.env_config)
+        print("Generic config: ", self.generic_config)
+        print("Profile config: ", self.profile_config)
+        print("Merged config: ", tmp_config)
 
-        self.merge(merged_config)
+        # Unflatten the tmp_config and merge it with the current config
+        self.merge(unflatten_dict(tmp_config))
 
-        # Built the new is_set map
+        # Build the is_set map
         flatten_config = flatten_dict(self.__dict__)
         tmp_is_set = {}
 
         for key, _ in flatten_config.items():
             # If the key exists in the config we set it initially
-            # to True because we have an value and something must have been set
+            # to True because we have a value and something must have been set
             tmp_is_set[key] = True
 
         flat_defaults = flatten_dict(default_params.__dict__)
@@ -394,6 +401,11 @@ class config(DefaultMunch):
         """Merge two configurations recursively.
         If there is a conflict, the value from the second configuration will take precedence.
         """
+        if a is None:
+            a = {}
+        if b is None:
+            return a
+
         for key in b:
             if key in a:
                 if isinstance(a[key], dict) and isinstance(b[key], dict):
@@ -403,22 +415,6 @@ class config(DefaultMunch):
             else:
                 a[key] = b[key]
         return a
-
-    def deep_merge(self, dict1, dict2):
-        """
-        Recursively merges dict2 into dict1
-        """
-        merged = deepcopy(dict1)
-        for key, value in dict2.items():
-            if (
-                key in merged
-                and isinstance(merged[key], dict)
-                and isinstance(value, dict)
-            ):
-                merged[key] = self.deep_merge(merged[key], value)
-            else:
-                merged[key] = deepcopy(value)
-        return merged
 
     def merge(self, b):
         """
@@ -447,18 +443,6 @@ class config(DefaultMunch):
         for cfg in configs:
             result.merge(cfg)
         return result
-
-    def get_value(self, d, keys):
-        """
-        Helper function to get the value from a nested dictionary using a list of keys.
-        Returns a tuple (value, exists) where exists is a boolean indicating whether the value was found.
-        """
-        for key in keys:
-            if isinstance(d, dict) and key in d:
-                d = d[key]
-            else:
-                return None, False
-        return d, True
 
     def is_set(self, param_name: str) -> bool:
         """
@@ -493,12 +477,14 @@ class config(DefaultMunch):
         """
         env_vars = {k: v for k, v in os.environ.items() if k.startswith("BT_")}
         for var, value in env_vars.items():
-            key = var[6:].lower()
+            key = var[3:].lower()
             key = key.replace("_", ".")
             self.env_config[key] = value
 
-    def load_generic_config(self):
-        config_path = os.path.expanduser(self.get("config", {}).get("path"))
+    def load_generic_config(self, config_path=None):
+        if config_path is None:
+            return
+
         config_file_yml = os.path.join(config_path, "btcliconfig.yml")
 
         config_file = None
@@ -514,11 +500,10 @@ class config(DefaultMunch):
         if config_data:
             self.generic_config = flatten_dict(config_data)
 
-    def load_active_profile(self):
-        profile_path = self.get("profile", {}).get("path")
-
+    def load_active_profile(self, profile_path=None):
         if not profile_path:
             return
+
         profile_name_holder = os.path.expanduser(
             os.path.join(profile_path, ".btcliprofile")
         )

@@ -1,3 +1,6 @@
+from copy import deepcopy
+
+
 def unflatten_dict(flat_dict):
     """Convert a flat dictionary with dot-separated keys to a nested dictionary."""
     nested_dict = {}
@@ -6,7 +9,7 @@ def unflatten_dict(flat_dict):
         keys = key.split(".")
         d = nested_dict
         for part in keys[:-1]:
-            if part not in d:
+            if part not in d or d[part] is None:
                 d[part] = {}
             d = d[part]
         d[keys[-1]] = value
@@ -24,3 +27,16 @@ def flatten_dict(nested_dict, parent_key="", sep="."):
         else:
             items.append((new_key, v))
     return dict(items)
+
+
+def deep_merge(dict1, dict2):
+    """
+    Recursively merges dict2 into dict1
+    """
+    merged = deepcopy(dict1)
+    for key, value in dict2.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = deep_merge(merged[key], value)
+        else:
+            merged[key] = deepcopy(value)
+    return merged
