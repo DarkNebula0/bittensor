@@ -10,10 +10,7 @@ from bittensor import config
 @pytest.fixture
 def mock_defaults():
     class MockDefaults:
-        config = {
-            "path": "~/.bittensor/",
-            "some_default": "default_value"
-        }
+        config = {"path": "~/.bittensor/", "some_default": "default_value"}
 
     return MockDefaults
 
@@ -33,41 +30,44 @@ def test_init_with_parser():
 
 def test_parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--test_arg', type=str, default='default_value')
-    cfg = config(parser=parser, args=['--test_arg', 'new_value'])
-    assert cfg.test_arg == 'new_value'
+    parser.add_argument("--test_arg", type=str, default="default_value")
+    cfg = config(parser=parser, args=["--test_arg", "new_value"])
+    assert cfg.test_arg == "new_value"
 
 
 def test_parse_args_strict():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--test_arg', type=str, default='default_value')
+    parser.add_argument("--test_arg", type=str, default="default_value")
     with pytest.raises(SystemExit):
-        cfg = config(parser=parser, args=['--unknown_arg', 'value'], strict=True)
+        cfg = config(parser=parser, args=["--unknown_arg", "value"], strict=True)
 
 
 def test_load_from_env_vars():
-    with patch.dict(os.environ, {"BTCLI_TEST_VAR": "env_value"}):
+    with patch.dict(os.environ, {"BT_TEST_VAR": "env_value"}):
         cfg = config()
         cfg.load_config_from_env_vars()
-        assert cfg.env_config.get('test.var') == 'env_value'
+        assert cfg.env_config.get("test.var") == "env_value"
 
 
 def test_load_or_create_generic_config(mock_defaults):
-    with patch("builtins.open", mock_open(read_data="some_default: 'file_value'")), \
-            patch("os.path.exists", return_value=True), \
-            patch("os.makedirs"):
+    with patch(
+        "builtins.open", mock_open(read_data="some_default: 'file_value'")
+    ), patch("os.path.exists", return_value=True), patch("os.makedirs"):
         cfg = config()
         cfg.load_or_create_generic_config()
-        assert cfg.generic_config.get('some_default') == 'file_value'
+        assert cfg.generic_config.get("some_default") == "file_value"
 
 
 def test_load_active_profile(mock_defaults):
-    with patch("builtins.open", mock_open(read_data="profile_setting: 'profile_value'")), \
-            patch("os.path.exists", return_value=True), \
-            patch.dict('os.environ', {'BTCLI_PROFILE_ACTIVE': 'default', 'BTCLI_PROFILE_PATH': '~/fake_path/'}):
+    with patch(
+        "builtins.open", mock_open(read_data="profile_setting: 'profile_value'")
+    ), patch("os.path.exists", return_value=True), patch.dict(
+        "os.environ",
+        {"BT_PROFILE_ACTIVE": "default", "BT_PROFILE_PATH": "~/fake_path/"},
+    ):
         cfg = config()
         cfg.load_active_profile()
-        assert cfg.profile_config.get('profile_setting') == 'profile_value'
+        assert cfg.profile_config.get("profile_setting") == "profile_value"
 
 
 def test_merge_configs():
@@ -81,24 +81,24 @@ def test_merge_configs():
 
 def test_is_set():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--test_arg', type=str)
-    cfg = config(parser=parser, args=['--test_arg', 'value'])
-    assert cfg.is_set('test_arg') == True
-    assert cfg.is_set('unset_arg') == False
+    parser.add_argument("--test_arg", type=str)
+    cfg = config(parser=parser, args=["--test_arg", "value"])
+    assert cfg.is_set("test_arg") == True
+    assert cfg.is_set("unset_arg") == False
 
 
 def test_check_for_missing_required_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--required_arg', type=str, required=True)
+    parser.add_argument("--required_arg", type=str, required=True)
     with pytest.raises(ValueError) as e:
         cfg = config(parser=parser, args=[])
     assert "Missing required arguments: --required_arg" in str(e.value)
 
 
 def test_unflatten_dict():
-    flat_dict = {'a.b.c': 1, 'a.b.d': 2, 'e': 3}
+    flat_dict = {"a.b.c": 1, "a.b.d": 2, "e": 3}
     nested_dict = config.unflatten_dict(flat_dict)
-    assert nested_dict == {'a': {'b': {'c': 1, 'd': 2}}, 'e': 3}
+    assert nested_dict == {"a": {"b": {"c": 1, "d": 2}}, "e": 3}
 
 
 def test_remove_private_keys():
@@ -106,10 +106,7 @@ def test_remove_private_keys():
         "key1": "value1",
         "__parser": "should be removed",
         "__is_set": "should be removed",
-        "nested": {
-            "key2": "value2",
-            "__parser": "should be removed from nested"
-        }
+        "nested": {"key2": "value2", "__parser": "should be removed from nested"},
     }
     cleaned_dict = config._remove_private_keys(test_dict)
     assert "__parser" not in cleaned_dict
@@ -138,7 +135,7 @@ def test_to_string_method():
     cfg = config()
     cfg.key1 = "value1"
     items = cfg.copy()
-    items.pop('__is_set', None)
+    items.pop("__is_set", None)
     expected_output = "\nkey1: value1\n"
     assert cfg.to_string(items) == expected_output
 
@@ -159,10 +156,14 @@ def test_deepcopy_method():
 
 
 def test_merge_static_method():
-    a = {'key1': 'value1', 'key2': {'subkey1': 'subvalue1'}}
-    b = {'key2': {'subkey1': 'new_subvalue1', 'subkey2': 'subvalue2'}, 'key3': 'value3'}
+    a = {"key1": "value1", "key2": {"subkey1": "subvalue1"}}
+    b = {"key2": {"subkey1": "new_subvalue1", "subkey2": "subvalue2"}, "key3": "value3"}
     merged = config._merge(a, b)
-    expected = {'key1': 'value1', 'key2': {'subkey1': 'new_subvalue1', 'subkey2': 'subvalue2'}, 'key3': 'value3'}
+    expected = {
+        "key1": "value1",
+        "key2": {"subkey1": "new_subvalue1", "subkey2": "subvalue2"},
+        "key3": "value3",
+    }
     assert merged == expected
 
 

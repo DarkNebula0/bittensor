@@ -68,11 +68,11 @@ class config(DefaultMunch):
     """
 
     def __init__(
-            self,
-            parser: argparse.ArgumentParser = None,
-            args: Optional[List[str]] = None,
-            strict: bool = False,
-            default: Optional[Any] = None,
+        self,
+        parser: argparse.ArgumentParser = None,
+        args: Optional[List[str]] = None,
+        strict: bool = False,
+        default: Optional[Any] = None,
     ) -> None:
         super().__init__(default)
 
@@ -141,9 +141,9 @@ class config(DefaultMunch):
         # 1.1 Optionally load defaults if the --config is set.
         try:
             config_file_path = (
-                    str(os.getcwd())
-                    + "/"
-                    + vars(parser.parse_known_args(args)[0])["config"]
+                str(os.getcwd())
+                + "/"
+                + vars(parser.parse_known_args(args)[0])["config"]
             )
         except Exception as e:
             config_file_path = None
@@ -226,21 +226,21 @@ class config(DefaultMunch):
         )
 
         # TODO: Where to store defaults? __init__ defaults are not usable here because of circular imports
-        self.merge({
-            "profile": {
-                "path": "~/.bittensor/profiles/"
-            },
-            "config": {
-                "path": "~/.bittensor/"
-            },
-        })
+        self.merge(
+            {
+                "profile": {"path": "~/.bittensor/profiles/"},
+                "config": {"path": "~/.bittensor/"},
+            }
+        )
 
         # Load config from environment variables and merge with defaults values
         self.load_config_from_env_vars()
 
         # Load or create generic config
         self.load_generic_config()
-        defaults_and_env = self.deep_merge(unflatten_dict(default_params.__dict__), unflatten_dict(self.env_config))
+        defaults_and_env = self.deep_merge(
+            unflatten_dict(default_params.__dict__), unflatten_dict(self.env_config)
+        )
 
         # Merge env vars with current config to load the profile
         self.merge(defaults_and_env)
@@ -250,9 +250,13 @@ class config(DefaultMunch):
 
         generic_and_profile = self.deep_merge(self.generic_config, self.profile_config)
 
-        merged_config = self.deep_merge(defaults_and_env,
-                                        self.deep_merge(unflatten_dict(generic_and_profile),
-                                                        unflatten_dict(params_no_defaults.__dict__)))
+        merged_config = self.deep_merge(
+            defaults_and_env,
+            self.deep_merge(
+                unflatten_dict(generic_and_profile),
+                unflatten_dict(params_no_defaults.__dict__),
+            ),
+        )
 
         self.merge(merged_config)
 
@@ -283,7 +287,7 @@ class config(DefaultMunch):
             keys = split_keys
             while len(keys) > 1:
                 if (
-                        hasattr(head, keys[0]) and head[keys[0]] != None
+                    hasattr(head, keys[0]) and head[keys[0]] != None
                 ):  # Needs to be Config
                     head = getattr(head, keys[0])
                     keys = keys[1:]
@@ -295,10 +299,10 @@ class config(DefaultMunch):
                 head[keys[0]] = arg_val
 
     def __parse_args__(
-            self,
-            args: List[str],
-            parser: argparse.ArgumentParser = None,
-            strict: bool = False,
+        self,
+        args: List[str],
+        parser: argparse.ArgumentParser = None,
+        strict: bool = False,
     ) -> argparse.Namespace:
         """Parses the passed args use the passed parser.
 
@@ -406,7 +410,11 @@ class config(DefaultMunch):
         """
         merged = deepcopy(dict1)
         for key, value in dict2.items():
-            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            if (
+                key in merged
+                and isinstance(merged[key], dict)
+                and isinstance(value, dict)
+            ):
                 merged[key] = self.deep_merge(merged[key], value)
             else:
                 merged[key] = deepcopy(value)
@@ -462,7 +470,7 @@ class config(DefaultMunch):
             return self.get("__is_set")[param_name]
 
     def __check_for_missing_required_args(
-            self, parser: argparse.ArgumentParser, args: List[str]
+        self, parser: argparse.ArgumentParser, args: List[str]
     ) -> List[str]:
         required_args = self.__get_required_args_from_parser(parser)
         missing_args = [arg for arg in required_args if not any(arg in s for s in args)]
@@ -480,10 +488,10 @@ class config(DefaultMunch):
 
     def load_config_from_env_vars(self):
         """
-        Store the key-value pairs from environment variables starting with BTCLI_ in env_config.
+        Store the key-value pairs from environment variables starting with BT_ in env_config.
         The environment variable names are converted to nested dictionary keys.
         """
-        env_vars = {k: v for k, v in os.environ.items() if k.startswith("BTCLI_")}
+        env_vars = {k: v for k, v in os.environ.items() if k.startswith("BT_")}
         for var, value in env_vars.items():
             key = var[6:].lower()
             key = key.replace("_", ".")
