@@ -20,7 +20,9 @@ def list_profiles(path):
     try:
         os.makedirs(path, exist_ok=True)
         files = os.listdir(path)
-        profiles = [profileFile for profileFile in files if profileFile.endswith(".yml")]
+        profiles = [
+            profileFile for profileFile in files if profileFile.endswith(".yml")
+        ]
     except Exception as e:
         log_error_with_exception("Failed to list profiles", e)
         return []
@@ -35,7 +37,7 @@ def list_profiles(path):
 def get_profile_file_path(path, profile_name):
     """Return the profile file path with the correct extension."""
     profiles = list_profiles(path)
-    profile_base_name = profile_name.replace('.yml', '')
+    profile_base_name = profile_name.replace(".yml", "")
 
     for profile in profiles:
         if profile.startswith(profile_base_name):
@@ -90,17 +92,20 @@ class ProfileCreateCommand:
         if not values:
             log_error(
                 "No key-value pairs provided. Please provide --values key=value key=value ... pairs to set in the "
-                "profile file.")
+                "profile file."
+            )
             return
 
         for arg in values:
-            if '=' in arg:
-                key, value = arg.split('=', 1)
+            if "=" in arg:
+                key, value = arg.split("=", 1)
                 parsed_params[key] = value
 
         if not parsed_params.__sizeof__() > 0:
-            log_error("Invalid values provided. Please provide --values key=value key=value ... pairs to set in the "
-                      "profile file.")
+            log_error(
+                "Invalid values provided. Please provide --values key=value key=value ... pairs to set in the "
+                "profile file."
+            )
             return
 
         ProfileCreateCommand._write_profile(cli.config, unflatten_dict(parsed_params))
@@ -118,7 +123,9 @@ class ProfileCreateCommand:
         if os.path.exists(profile_file) and not config.no_prompt:
             overwrite = None
             while overwrite not in ["y", "n"]:
-                overwrite = Prompt.ask(f"Profile {config.profile.name} already exists. Overwrite?")
+                overwrite = Prompt.ask(
+                    f"Profile {config.profile.name} already exists. Overwrite?"
+                )
                 if overwrite:
                     overwrite = overwrite.lower()
             if overwrite == "n":
@@ -145,22 +152,27 @@ class ProfileCreateCommand:
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
-        profile_parser = parser.add_parser("create", help="""Create profile""")
+        profile_parser = parser.add_parser(
+            "create", help="""Create a new profile with specified key-value pairs."""
+        )
         profile_parser.set_defaults(func=ProfileCreateCommand.run)
         profile_parser.add_argument(
             "--profile.name",
             type=str,
             default=defaults.profile.name,
-            help="The name of the profile",
+            help="The name of the profile to be created. Example: --profile.name=my_profile",
         )
         profile_parser.add_argument(
             "--profile.path",
             type=str,
             default=defaults.profile.path,
-            help="The path to the profile directory",
+            help="The directory path where the profile will be stored. Example: --profile.path=~/profiles",
         )
-        profile_parser.add_argument("--values", nargs=argparse.REMAINDER,
-                                    help="The key=value pairs to set in the profile file")
+        profile_parser.add_argument(
+            "--values",
+            nargs=argparse.REMAINDER,
+            help="The key=value pairs to set in the profile. Example: --values key1=value1 key2=value2",
+        )
 
 
 class ProfileListCommand:
@@ -180,13 +192,19 @@ class ProfileListCommand:
 
         profile_content = []
         for profile in profiles:
-            profile_name = profile.replace('.yml', '')
+            profile_name = profile.replace(".yml", "")
             if profile_name == active_profile:
                 profile_content.append(["*", profile_name])
             else:
                 profile_content.append(["", profile_name])
 
-        table = Table(show_footer=True, width=cli.config.get("width", None), pad_edge=True, box=None, show_edge=True)
+        table = Table(
+            show_footer=True,
+            width=cli.config.get("width", None),
+            pad_edge=True,
+            box=None,
+            show_edge=True,
+        )
         table.title = "[white]Profiles"
         table.add_column("Active", style="red", justify="center", min_width=1)
         table.add_column("Name", style="white", justify="left", min_width=20)
@@ -206,10 +224,16 @@ class ProfileListCommand:
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
-        profile_parser = parser.add_parser("list", help="""List profiles""")
+        profile_parser = parser.add_parser(
+            "list", help="""List all profiles in the specified directory."""
+        )
         profile_parser.set_defaults(func=ProfileListCommand.run)
-        profile_parser.add_argument("--profile.path", type=str, default=defaults.profile.path,
-                                    help="The path to the profile directory")
+        profile_parser.add_argument(
+            "--profile.path",
+            type=str,
+            default=defaults.profile.path,
+            help="Specify the directory path where profiles are stored. Example: --profile.path=~/profiles",
+        )
 
 
 class ProfileShowCommand:
@@ -226,10 +250,23 @@ class ProfileShowCommand:
             # Error message already printed in get_profile_file_path
             return
 
-        table = Table(show_footer=True, width=cli.config.get("width", None), pad_edge=True, box=None, show_edge=True)
+        table = Table(
+            show_footer=True,
+            width=cli.config.get("width", None),
+            pad_edge=True,
+            box=None,
+            show_edge=True,
+        )
         table.title = f"[white]Profile [bold white]{config.profile.name}"
-        table.add_column("[overline white]PARAMETERS", style="bold white", justify="left", min_width=15)
-        table.add_column("[overline white]VALUES", style="green", justify="left", min_width=20)
+        table.add_column(
+            "[overline white]PARAMETERS",
+            style="bold white",
+            justify="left",
+            min_width=15,
+        )
+        table.add_column(
+            "[overline white]VALUES", style="green", justify="left", min_width=20
+        )
         flat_contents = flatten_dict(contents)
 
         for key in flat_contents:
@@ -248,11 +285,22 @@ class ProfileShowCommand:
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
-        profile_parser = parser.add_parser("show", help="""Show profile""")
+        profile_parser = parser.add_parser(
+            "show", help="""Display the details of a specified profile."""
+        )
         profile_parser.set_defaults(func=ProfileShowCommand.run)
-        profile_parser.add_argument("--profile.name", type=str, help="The name of the profile")
-        profile_parser.add_argument("--profile.path", type=str, default=defaults.profile.path,
-                                    help="The path to the profile directory")
+        profile_parser.add_argument(
+            "--profile.name",
+            type=str,
+            help="Specify the profile name to display. Example: --profile.name=my_profile",
+            default=defaults.profile.name,
+        )
+        profile_parser.add_argument(
+            "--profile.path",
+            type=str,
+            default=defaults.profile.path,
+            help="Specify the directory path where profiles are stored. Example: --profile.path=~/profiles",
+        )
 
 
 class ProfileDeleteCommand:
@@ -271,7 +319,9 @@ class ProfileDeleteCommand:
 
         try:
             os.remove(profile_path)
-            log_info(f"Profile {config.profile.name} deleted from {os.path.expanduser(config.profile.path)}")
+            log_info(
+                f"Profile {config.profile.name} deleted from {os.path.expanduser(config.profile.path)}"
+            )
         except Exception as e:
             log_error_with_exception("Failed to delete profile", e)
 
@@ -286,11 +336,22 @@ class ProfileDeleteCommand:
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
-        profile_parser = parser.add_parser("delete", help="""Delete profile""")
+        profile_parser = parser.add_parser(
+            "delete", help="""Delete a specified profile."""
+        )
         profile_parser.set_defaults(func=ProfileDeleteCommand.run)
-        profile_parser.add_argument("--profile.name", type=str, help="The name of the profile to delete")
-        profile_parser.add_argument("--profile.path", type=str, default=defaults.profile.path,
-                                    help="The path to the profile directory")
+        profile_parser.add_argument(
+            "--profile.name",
+            type=str,
+            help="Specify the profile name to delete. Example: --profile.name=my_profile",
+            default=defaults.profile.name,
+        )
+        profile_parser.add_argument(
+            "--profile.path",
+            type=str,
+            default=defaults.profile.path,
+            help="Specify the directory path where the profile is stored. Example: --profile.path=~/profiles",
+        )
 
 
 class ProfileSetValueCommand:
@@ -307,7 +368,8 @@ class ProfileSetValueCommand:
         if not values:
             log_error(
                 "No key-value pairs provided. Please provide --values key=value key=value ... pairs to set in the "
-                "profile file.")
+                "profile file."
+            )
             return
 
         if profile_path is None:
@@ -321,9 +383,13 @@ class ProfileSetValueCommand:
             if "=" in arg:
                 key, value = arg.split("=")
                 if flatten_contents.__contains__(key):
-                    log_info(f"Variable {key} was updated to {value} in profile {config.profile.name}")
+                    log_info(
+                        f"Variable {key} was updated to {value} in profile {config.profile.name}"
+                    )
                 else:
-                    log_info(f"Variable {key} was created with value {value} in profile {config.profile.name}")
+                    log_info(
+                        f"Variable {key} was created with value {value} in profile {config.profile.name}"
+                    )
 
                 flatten_contents[key] = value
 
@@ -344,12 +410,28 @@ class ProfileSetValueCommand:
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
-        profile_parser = parser.add_parser("set_value", help="""Set or update profile values""")
+        profile_parser = parser.add_parser(
+            "set_value",
+            help="""Set or update key-value pairs in a specified profile.""",
+        )
         profile_parser.set_defaults(func=ProfileSetValueCommand.run)
-        profile_parser.add_argument("--profile.name", type=str, help="The name of the profile to update")
-        profile_parser.add_argument("--profile.path", type=str, default=defaults.profile.path,
-                                    help="The path to the profile directory")
-        profile_parser.add_argument("--values", nargs=argparse.REMAINDER, help="The key=value pairs to set or update")
+        profile_parser.add_argument(
+            "--profile.name",
+            type=str,
+            help="Specify the profile name to update. Example: --profile.name=my_profile",
+            default=defaults.profile.name,
+        )
+        profile_parser.add_argument(
+            "--profile.path",
+            type=str,
+            default=defaults.profile.path,
+            help="Specify the directory path where the profile is stored. Example: --profile.path=~/profiles",
+        )
+        profile_parser.add_argument(
+            "--values",
+            nargs=argparse.REMAINDER,
+            help="The key=value pairs to set or update in the profile. Example: --values key1=value1 key2=value2",
+        )
 
 
 class ProfileDeleteValueCommand:
@@ -365,7 +447,8 @@ class ProfileDeleteValueCommand:
 
         if not values:
             log_error(
-                "No keys provided. Please provide --values key key ... to delete from the profile file.")
+                "No keys provided. Please provide --values key key ... to delete from the profile file."
+            )
             return
 
         if profile_path is None:
@@ -378,9 +461,13 @@ class ProfileDeleteValueCommand:
             key = arg
             if flatten_contents.__contains__(key):
                 del flatten_contents[key]
-                log_info(f"Variable {key} was removed from profile {config.profile.name}")
+                log_info(
+                    f"Variable {key} was removed from profile {config.profile.name}"
+                )
             else:
-                log_warning(f"Variable {key} does not exist in profile {config.profile.name}")
+                log_warning(
+                    f"Variable {key} does not exist in profile {config.profile.name}"
+                )
 
         try:
             with open(profile_path, "w") as f:
@@ -399,12 +486,28 @@ class ProfileDeleteValueCommand:
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
-        profile_parser = parser.add_parser("delete_value", help="""Delete profile values""")
+        profile_parser = parser.add_parser(
+            "delete_value",
+            help="""Delete specific key-value pairs from a specified profile.""",
+        )
         profile_parser.set_defaults(func=ProfileDeleteValueCommand.run)
-        profile_parser.add_argument("--profile.name", type=str, help="The name of the profile to update")
-        profile_parser.add_argument("--profile.path", type=str, default=defaults.profile.path,
-                                    help="The path to the profile directory")
-        profile_parser.add_argument("--values", nargs=argparse.REMAINDER, help="The keys to delete")
+        profile_parser.add_argument(
+            "--profile.name",
+            type=str,
+            help="Specify the profile name to update. Example: --profile.name=my_profile",
+            default=defaults.profile.name,
+        )
+        profile_parser.add_argument(
+            "--profile.path",
+            type=str,
+            default=defaults.profile.path,
+            help="Specify the directory path where the profile is stored. Example: --profile.path=~/profiles",
+        )
+        profile_parser.add_argument(
+            "--values",
+            nargs=argparse.REMAINDER,
+            help="The keys to delete from the profile. Example: --values key1 key2",
+        )
 
 
 class ProfileUseCommand:
@@ -418,8 +521,10 @@ class ProfileUseCommand:
             return
 
         try:
-            file_path = os.path.join(os.path.expanduser(config.profile.path), '.btcliprofile')
-            with open(file_path, 'w+') as file:
+            file_path = os.path.join(
+                os.path.expanduser(config.profile.path), ".btcliprofile"
+            )
+            with open(file_path, "w+") as file:
                 file.write(config.profile.name)
 
             log_info(f"Profile {config.profile.name} set as active.")
@@ -433,13 +538,23 @@ class ProfileUseCommand:
         path = profile.get("path")
         # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
         # Is there any case where this function is useful?
-        return name is not None or path is not None
+        return name is not None and path is not None
 
     @staticmethod
     def add_args(parser: argparse.ArgumentParser):
-        profile_parser = parser.add_parser("use", help="""Use active profile""")
+        profile_parser = parser.add_parser(
+            "use", help="""Set a specified profile as the active profile."""
+        )
         profile_parser.set_defaults(func=ProfileUseCommand.run)
-        profile_parser.add_argument("--profile.name", type=str, help="The name of the profile to use",
-                                    default=defaults.profile.name)
-        profile_parser.add_argument("--profile.path", type=str, default=defaults.profile.path,
-                                    help="The path to the profile directory")
+        profile_parser.add_argument(
+            "--profile.name",
+            type=str,
+            help="Specify the profile name to set as active. Example: --profile.name=my_profile",
+            default=defaults.profile.name,
+        )
+        profile_parser.add_argument(
+            "--profile.path",
+            type=str,
+            default=defaults.profile.path,
+            help="Specify the directory path where the profile is stored. Example: --profile.path=~/profiles",
+        )

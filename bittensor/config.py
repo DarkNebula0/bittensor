@@ -258,12 +258,6 @@ class config(DefaultMunch):
             **self.params_config,
         }
 
-        print("Defaults: ", flatten_dict(default_params.__dict__))
-        print("Env config: ", self.env_config)
-        print("Generic config: ", self.generic_config)
-        print("Profile config: ", self.profile_config)
-        print("Merged config: ", tmp_config)
-
         # Unflatten the tmp_config and merge it with the current config
         self.merge(unflatten_dict(tmp_config))
 
