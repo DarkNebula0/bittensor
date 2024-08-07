@@ -28,6 +28,7 @@ import logging as stdlogging
 import multiprocessing as mp
 import os
 import sys
+from munch import Munch, munchify
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from typing import NamedTuple
 
@@ -89,7 +90,7 @@ class LoggingMachine(StateMachine):
         | Disabled.to(Disabled)
     )
 
-    def __init__(self, config: bittensor.config, name: str = BITTENSOR_LOGGER_NAME):
+    def __init__(self, config: Munch, name: str = BITTENSOR_LOGGER_NAME):
         # basics
         super(LoggingMachine, self).__init__()
         self._queue = mp.Queue(-1)
@@ -125,9 +126,9 @@ class LoggingMachine(StateMachine):
         handlers.append(stream_handler)
 
         # file handler, maybe
-        if config.record_log and config.logging_dir:
+        if config.logging.record_log and config.logging.logging_dir:
             logfile = os.path.abspath(
-                os.path.join(config.logging_dir, DEFAULT_LOG_FILE_NAME)
+                os.path.join(config.logging.logging_dir, DEFAULT_LOG_FILE_NAME)
             )
             file_handler = self._create_file_handler(logfile)
             handlers.append(file_handler)
@@ -139,13 +140,13 @@ class LoggingMachine(StateMachine):
     def set_config(self, config):
         """Set config after initialization, if desired."""
         self._config = config
-        if config.logging_dir and config.record_log:
-            expanded_dir = os.path.expanduser(config.logging_dir)
+        if config.logging.logging_dir and config.logging.record_log:
+            expanded_dir = os.path.expanduser(config.logging.logging_dir)
             logfile = os.path.abspath(os.path.join(expanded_dir, DEFAULT_LOG_FILE_NAME))
             self._enable_file_logging(logfile)
-        if config.trace:
+        if config.logging.trace:
             self.enable_trace()
-        elif config.debug:
+        elif config.logging.debug:
             self.enable_debug()
 
     def _create_and_start_listener(self, handlers):
@@ -423,50 +424,55 @@ class LoggingMachine(StateMachine):
         """Accept specific arguments fro parser"""
         prefix_str = "" if prefix is None else prefix + "."
         try:
-            default_logging_debug = os.getenv("BT_LOGGING_DEBUG") or False
-            default_logging_trace = os.getenv("BT_LOGGING_TRACE") or False
-            default_logging_record_log = os.getenv("BT_LOGGING_RECORD_LOG") or False
-            default_logging_logging_dir = (
-                os.getenv("BT_LOGGING_LOGGING_DIR") or "~/.bittensor/miners"
-            )
+            config = cls.config()
+
             parser.add_argument(
                 "--" + prefix_str + "logging.debug",
                 action="store_true",
                 help="""Turn on bittensor debugging information""",
-                default=default_logging_debug,
+                default=config.logging.debug,
             )
             parser.add_argument(
                 "--" + prefix_str + "logging.trace",
                 action="store_true",
                 help="""Turn on bittensor trace level information""",
-                default=default_logging_trace,
+                default=config.logging.trace,
             )
             parser.add_argument(
                 "--" + prefix_str + "logging.record_log",
                 action="store_true",
                 help="""Turns on logging to file.""",
-                default=default_logging_record_log,
+                default=config.logging.record_log,
             )
             parser.add_argument(
                 "--" + prefix_str + "logging.logging_dir",
                 type=str,
                 help="Logging default root directory.",
-                default=default_logging_logging_dir,
+                default=config.logging.logging_dir,
             )
         except argparse.ArgumentError:
             # re-parsing arguments.
             pass
 
     @classmethod
-    def config(cls) -> bittensor.config:
-        """Get config from the argument parser.
-
-        Return:
-            config (bittensor.config): config object
+    def config(cls) -> Munch:
         """
-        parser = argparse.ArgumentParser()
-        cls.add_args(parser)
-        return bittensor.config(parser, args=[])
+        Get config for the logging defaults.
+
+        Returns:
+            Munch: Config object containing logging defaults.
+        """
+
+        return munchify(
+            {
+                "logging": {
+                    "debug": False,
+                    "trace": False,
+                    "record_log": False,
+                    "logging_dir": "~/.bittensor/miners",
+                }
+            }
+        )
 
     def __call__(
         self,
@@ -479,15 +485,22 @@ class LoggingMachine(StateMachine):
         if config is not None:
             cfg = copy.deepcopy(config)
             if debug is not None:
-                cfg.debug = debug
+                cfg.logging.debug = debug
             elif trace is not None:
-                cfg.trace = trace
+                cfg.logging.trace = trace
             if record_log is not None:
-                cfg.record_log = record_log
+                cfg.logging.record_log = record_log
             if logging_dir is not None:
-                cfg.logging_dir = logging_dir
+                cfg.logging.logging_dir = logging_dir
         else:
-            cfg = LoggingConfig(
-                debug=debug, trace=trace, record_log=record_log, logging_dir=logging_dir
+            cfg = munchify(
+                {
+                    "logging": LoggingConfig(
+                        debug=debug,
+                        trace=trace,
+                        record_log=record_log,
+                        logging_dir=logging_dir,
+                    )
+                }
             )
         self.set_config(cfg)

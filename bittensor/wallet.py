@@ -111,16 +111,11 @@ class wallet:
     @classmethod
     def config(cls) -> Munch:
         """
-        Get config from the argument parser.
+        Get config for the wallet defaults.
 
         Returns:
-            bittensor.config: Config object.
+            Munch: Config object containing wallet defaults.
         """
-        # TODO: Why do we not just return a piece of the config object?
-        #  Why do we go over the parser to get the default values?
-        # parser = argparse.ArgumentParser()
-        # cls.add_args(parser)
-        # return bittensor.config(parser, args=[])
         return munchify(
             {
                 "wallet": {

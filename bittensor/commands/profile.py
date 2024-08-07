@@ -146,8 +146,6 @@ class ProfileCreateCommand:
         profile = config.get("profile", {})
         name = profile.get("name")
         path = profile.get("path")
-        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
-        # Is there any case where this function is useful?
         return name is not None and path is not None
 
     @staticmethod
@@ -218,8 +216,6 @@ class ProfileListCommand:
     def check_config(config: "bittensor.config"):
         profile = config.get("profile", {})
         path = profile.get("path")
-        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
-        # Is there any case where this function is useful?
         return path is not None
 
     @staticmethod
@@ -279,8 +275,6 @@ class ProfileShowCommand:
         profile = config.get("profile", {})
         name = profile.get("name")
         path = profile.get("path")
-        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
-        # Is there any case where this function is useful?
         return name is not None and path is not None
 
     @staticmethod
@@ -330,8 +324,6 @@ class ProfileDeleteCommand:
         profile = config.get("profile", {})
         name = profile.get("name")
         path = profile.get("path")
-        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
-        # Is there any case where this function is useful?
         return name is not None and path is not None
 
     @staticmethod
@@ -404,8 +396,6 @@ class ProfileSetValueCommand:
         profile = config.get("profile", {})
         name = profile.get("name")
         path = profile.get("path")
-        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
-        # Is there any case where this function is useful?
         return name is not None and path is not None
 
     @staticmethod
@@ -480,8 +470,6 @@ class ProfileDeleteValueCommand:
         profile = config.get("profile", {})
         name = profile.get("name")
         path = profile.get("path")
-        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
-        # Is there any case where this function is useful?
         return name is not None and path is not None
 
     @staticmethod
@@ -536,8 +524,6 @@ class ProfileUseCommand:
         profile = config.get("profile", {})
         name = profile.get("name")
         path = profile.get("path")
-        # TODO: Check; This should never been possible because of the defaults which are set in the argument parser
-        # Is there any case where this function is useful?
         return name is not None and path is not None
 
     @staticmethod

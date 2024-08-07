@@ -46,9 +46,9 @@ _version_int_base = 1000
 assert max(__version_info__) < _version_int_base
 
 __version_as_int__: int = sum(
-    e * (_version_int_base ** i) for i, e in enumerate(reversed(__version_info__))
+    e * (_version_int_base**i) for i, e in enumerate(reversed(__version_info__))
 )
-assert __version_as_int__ < 2 ** 31  # fits in int32
+assert __version_as_int__ < 2**31  # fits in int32
 __new_signature_version__ = 360
 
 # Rich console.
@@ -366,10 +366,6 @@ from .mock.wallet_mock import MockWallet as MockWallet
 
 from .subnets import SubnetsAPI as SubnetsAPI
 
-# TODO: Do we still need this? This is a really bad way to do this. We currently re initializing the config for every
-#  entry in this list. And create a parser with an empty arguments to merge the defaults on it. (login env, profile,
-#  ...) and then merging them all together. Maybe a better way would be to export a constant with the configs directly.
-#  Why initializing a parser and the config class in the first place?
 configs = [
     axon.config(),
     subtensor.config(),
