@@ -111,7 +111,7 @@ class wallet:
     @classmethod
     def config(cls) -> Munch:
         """
-        Get config for the wallet defaults.
+        Get config from the wallet defaults.
 
         Returns:
             Munch: Config object containing wallet defaults.

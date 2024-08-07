@@ -30,7 +30,7 @@ from typing import List, Optional, Dict, Any, TypeVar, Type
 import argparse
 
 import bittensor
-from .utils.data import unflatten_dict, flatten_dict, deep_merge
+from .utils.data import flatten_dict, unflatten_dict_to_munch
 
 
 class InvalidConfigFile(Exception):
@@ -250,6 +250,7 @@ class config(DefaultMunch):
 
         # Merge all the configs overwrite order is -> defaults -> generic -> profile -> env -> params
         tmp_config = {
+            **flatten_dict(bittensor.defaults.__dict__),
             **flatten_dict(default_params.__dict__),
             **self.generic_config,
             **self.profile_config,
@@ -259,7 +260,7 @@ class config(DefaultMunch):
         }
 
         # Unflatten the tmp_config and merge it with the current config
-        self.merge(unflatten_dict(tmp_config))
+        self.merge(unflatten_dict_to_munch(tmp_config))
 
         # Build the is_set map
         flatten_config = flatten_dict(self.__dict__)
@@ -468,12 +469,25 @@ class config(DefaultMunch):
         """
         Store the key-value pairs from environment variables starting with BT_ in env_config.
         The environment variable names are converted to nested dictionary keys.
+        The conversion involves:
+        - Removing the "BT_" prefix
+        - Converting the remaining characters to lowercase
+        - Replacing double underscores (__) with underscores (_)
+        - Replacing single underscores (_) with dots (.)
+
+        Example:
+        BT_LOGGING_LOGGING__DIR would become logging.logging_dir
         """
         env_vars = {k: v for k, v in os.environ.items() if k.startswith("BT_")}
         for var, value in env_vars.items():
             key = var[3:].lower()
-            key = key.replace("_", ".")
+            key = key.replace("__", "_").replace("_", ".")
             self.env_config[key] = value
+            # TODO: We need to talk about backwards compatibility here. The old environments were inconsistent and in
+            #  some places '_' would be resolved to '_' and in others to '.' Example: BT_LOGGING_LOGGING_DIR would
+            #  become logging.logging_dir but with this generic approach it would be logging.logging.dir So we would
+            #  need to introduce this breaking change, and variables like BT_LOGGING_LOGGING_DIR would become
+            #  BT_LOGGING_LOGGING__DIR
 
     def load_generic_config(self, config_path=None):
         if config_path is None:

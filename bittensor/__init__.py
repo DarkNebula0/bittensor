@@ -19,6 +19,7 @@
 import os
 import warnings
 
+from munch import Munch
 from rich.console import Console
 from rich.traceback import install
 
@@ -366,11 +367,14 @@ from .mock.wallet_mock import MockWallet as MockWallet
 
 from .subnets import SubnetsAPI as SubnetsAPI
 
-configs = [
+# Building default config.
+# Maybe we should move this to a separate file. Then we could reuse it as base for the command file.
+defaults = Munch()
+for element in [
     axon.config(),
     subtensor.config(),
     PriorityThreadPoolExecutor.config(),
     wallet.config(),
     logging.get_config(),
-]
-defaults = config.merge_all(configs)
+]:
+    defaults.update(element)

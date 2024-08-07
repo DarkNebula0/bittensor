@@ -31,6 +31,7 @@ import time
 import traceback
 import typing
 import uuid
+from munch import Munch, munchify
 from inspect import signature, Signature, Parameter
 from typing import List, Optional, Tuple, Callable, Any, Dict, Awaitable
 
@@ -552,16 +553,24 @@ class axon:
         return self
 
     @classmethod
-    def config(cls) -> "bittensor.config":
+    def config(cls) -> Munch:
         """
-        Parses the command-line arguments to form a Bittensor configuration object.
+        Get config from the axon defaults.
 
         Returns:
-            bittensor.config: Configuration object with settings from command-line arguments.
+            Munch: Config object containing axon defaults.
         """
-        parser = argparse.ArgumentParser()
-        axon.add_args(parser)  # Add specific axon-related arguments
-        return bittensor.config(parser, args=[])
+        return munchify(
+            {
+                "axon": {
+                    "port": 8091,
+                    "ip": "[::]",
+                    "external_port": None,
+                    "external_ip": None,
+                    "max_workers": 10,
+                }
+            }
+        )
 
     @classmethod
     def help(cls):
@@ -587,46 +596,41 @@ class axon:
         """
         prefix_str = "" if prefix is None else prefix + "."
         try:
-            # Get default values from environment variables or use default values
-            default_axon_port = os.getenv("BT_AXON_PORT") or 8091
-            default_axon_ip = os.getenv("BT_AXON_IP") or "[::]"
-            default_axon_external_port = os.getenv("BT_AXON_EXTERNAL_PORT") or None
-            default_axon_external_ip = os.getenv("BT_AXON_EXTERNAL_IP") or None
-            default_axon_max_workers = os.getenv("BT_AXON_MAX_WORERS") or 10
+            config = cls.config()
 
             # Add command-line arguments to the parser
             parser.add_argument(
                 "--" + prefix_str + "axon.port",
                 type=int,
                 help="The local port this axon endpoint is bound to. i.e. 8091",
-                default=default_axon_port,
+                default=config.axon.port,
             )
             parser.add_argument(
                 "--" + prefix_str + "axon.ip",
                 type=str,
                 help="""The local ip this axon binds to. ie. [::]""",
-                default=default_axon_ip,
+                default=config.axon.ip,
             )
             parser.add_argument(
                 "--" + prefix_str + "axon.external_port",
                 type=int,
                 required=False,
                 help="""The public port this axon broadcasts to the network. i.e. 8091""",
-                default=default_axon_external_port,
+                default=config.axon.external_port,
             )
             parser.add_argument(
                 "--" + prefix_str + "axon.external_ip",
                 type=str,
                 required=False,
                 help="""The external ip this axon broadcasts to the network to. ie. [::]""",
-                default=default_axon_external_ip,
+                default=config.axon.external_ip,
             )
             parser.add_argument(
                 "--" + prefix_str + "axon.max_workers",
                 type=int,
                 help="""The maximum number connection handler threads working simultaneously on this endpoint.
                         The grpc server distributes new worker threads to service requests up to this number.""",
-                default=default_axon_max_workers,
+                default=config.axon.max_workers,
             )
 
         except argparse.ArgumentError:
@@ -902,10 +906,10 @@ class axon:
             ):
                 # If we don't have a nonce stored, ensure that the nonce falls within
                 # a reasonable delta.
-                if (
-                    self.nonces.get(endpoint_key) is None
-                    and synapse.dendrite.nonce
-                    <= time.time_ns() - ALLOWED_DELTA - (synapse.timeout or 0)
+                if self.nonces.get(
+                    endpoint_key
+                ) is None and synapse.dendrite.nonce <= time.time_ns() - ALLOWED_DELTA - (
+                    synapse.timeout or 0
                 ):
                     raise Exception("Nonce is too old")
                 if (

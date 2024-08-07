@@ -1,4 +1,5 @@
 from copy import deepcopy
+from munch import Munch
 
 
 def unflatten_dict(flat_dict):
@@ -11,6 +12,22 @@ def unflatten_dict(flat_dict):
         for part in keys[:-1]:
             if part not in d or d[part] is None:
                 d[part] = {}
+            d = d[part]
+        d[keys[-1]] = value
+
+    return nested_dict
+
+
+def unflatten_dict_to_munch(flat_dict):
+    """Convert a flat dictionary with dot-separated keys to a nested dictionary."""
+    nested_dict = Munch()
+
+    for key, value in flat_dict.items():
+        keys = key.split(".")
+        d = nested_dict
+        for part in keys[:-1]:
+            if part not in d or d[part] is None:
+                d[part] = Munch()
             d = d[part]
         d[keys[-1]] = value
 

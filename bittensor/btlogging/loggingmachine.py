@@ -457,7 +457,7 @@ class LoggingMachine(StateMachine):
     @classmethod
     def config(cls) -> Munch:
         """
-        Get config for the logging defaults.
+        Get config from the logging defaults.
 
         Returns:
             Munch: Config object containing logging defaults.
