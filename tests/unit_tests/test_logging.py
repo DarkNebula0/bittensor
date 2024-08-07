@@ -2,6 +2,7 @@ import pytest
 import multiprocessing
 import logging as stdlogging
 from unittest.mock import MagicMock, patch
+from munch import munchify
 from bittensor.btlogging import LoggingMachine
 from bittensor.btlogging.defines import DEFAULT_LOG_FILE_NAME, BITTENSOR_LOGGER_NAME
 from bittensor.btlogging.loggingmachine import LoggingConfig
@@ -32,8 +33,12 @@ def mock_config(tmp_path):
     log_dir.mkdir()  # Create the temporary directory
     log_file_path = log_dir / DEFAULT_LOG_FILE_NAME
 
-    mock_config = LoggingConfig(
-        debug=False, trace=False, record_log=True, logging_dir=str(log_dir)
+    mock_config = munchify(
+        {
+            "logging": LoggingConfig(
+                debug=False, trace=False, record_log=True, logging_dir=str(log_dir)
+            )
+        }
     )
 
     yield mock_config, log_file_path
@@ -62,7 +67,7 @@ def test_initialization(logging_machine, mock_config):
         isinstance(handler, stdlogging.StreamHandler)
         for handler in logging_machine._handlers
     )
-    if config.record_log and config.logging_dir:
+    if config.logging.record_log and config.logging.logging_dir:
         assert any(
             isinstance(handler, stdlogging.FileHandler)
             for handler in logging_machine._handlers
@@ -133,15 +138,25 @@ def test_enable_file_logging_with_new_config(tmp_path):
     log_file_path = log_dir / DEFAULT_LOG_FILE_NAME
 
     # check no file handler is created
-    config = LoggingConfig(debug=False, trace=False, record_log=True, logging_dir=None)
+    config = munchify(
+        {
+            "logging": LoggingConfig(
+                debug=False, trace=False, record_log=True, logging_dir=None
+            )
+        }
+    )
     lm = LoggingMachine(config)
     assert not any(
         isinstance(handler, stdlogging.FileHandler) for handler in lm._handlers
     )
 
     # check file handler now exists
-    new_config = LoggingConfig(
-        debug=False, trace=False, record_log=True, logging_dir=str(log_dir)
+    new_config = munchify(
+        {
+            "logging": LoggingConfig(
+                debug=False, trace=False, record_log=True, logging_dir=str(log_dir)
+            )
+        }
     )
     lm.set_config(new_config)
     assert any(isinstance(handler, stdlogging.FileHandler) for handler in lm._handlers)
