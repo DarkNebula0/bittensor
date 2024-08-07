@@ -5,6 +5,7 @@ from unittest.mock import patch, MagicMock, mock_open
 
 # 3rd Party
 import pytest
+import yaml
 from rich.table import Table
 
 # Bittensor
@@ -182,13 +183,28 @@ def test_profile_delete_command(mock_cli):
     with patch("os.remove") as mock_remove, patch(
         "bittensor.commands.profile.get_profile_path_from_config",
         return_value=profile_path,
-    ), patch("builtins.open", mock_open(read_data="profile:\n  name: test_profile")):
-        ProfileDeleteCommand.run(mock_cli)
+    ), patch(
+        "builtins.open", mock_open(read_data="profile:\n  name: test_profile")
+    ), patch(
+        "bittensor.commands.profile.Prompt.ask", return_value="y"
+    ), patch(
+        "bittensor.commands.profile.log_info"
+    ) as mock_log_info, patch(
+        "bittensor.commands.profile.log_error_with_exception"
+    ) as mock_log_error:
+        # Run the command
+        ProfileDeleteCommand._run(mock_cli)
+
+        # Check if the profile was deleted
         mock_remove.assert_called_once_with("/fake/path/test_profile.yml")
+        mock_log_info.assert_called_once_with(
+            f"Profile {mock_cli.config.profile.name} deleted from {os.path.expanduser(mock_cli.config.profile.path)}"
+        )
+        mock_log_error.assert_not_called()
 
 
 def test_profile_set_value_command(mock_cli):
-    mock_cli.config.values = ["profile.name=new_name"]
+    mock_cli.config["values"] = ["profile.name=new_name"]
     with patch(
         "builtins.open", mock_open(read_data="profile:\n  name: test_profile")
     ), patch(
@@ -201,16 +217,59 @@ def test_profile_set_value_command(mock_cli):
 
 
 def test_profile_delete_value_command(mock_cli):
-    mock_cli.config.values = ["profile.name"]
+    mock_cli.config["values"] = ["profile.name"]
+    profile_path = "/fake/path/test_profile.yml"
+    profile_data = {"profile": {"name": "test_profile"}}
+    flatten_contents = {"profile.name": "test_profile"}
+
     with patch(
-        "builtins.open", mock_open(read_data="profile:\n  name: test_profile")
+        "bittensor.commands.profile.open_profile",
+        return_value=(profile_path, profile_data),
     ), patch(
         "bittensor.commands.profile.get_profile_path_from_config",
-        return_value="/fake/path/test_profile.yml",
+        return_value=profile_path,
     ), patch(
+        "bittensor.commands.profile.Prompt.ask", return_value="y"
+    ), patch(
+        "bittensor.commands.profile.flatten_dict", return_value=flatten_contents
+    ), patch(
+        "bittensor.commands.profile.unflatten_dict",
+        return_value={"profile": {"name": None}},
+    ), patch(
+        "bittensor.commands.profile.log_info"
+    ) as mock_log_info, patch(
+        "bittensor.commands.profile.log_warning"
+    ) as mock_log_warning, patch(
+        "bittensor.commands.profile.log_error"
+    ) as mock_log_error, patch(
+        "bittensor.commands.profile.log_error_with_exception"
+    ) as mock_log_error_with_exception, patch(
         "bittensor.__console__.print"
     ):
-        ProfileDeleteValueCommand.run(mock_cli)
+        # Mocking the open function to simulate file writing
+        with patch("builtins.open", mock_open()) as mocked_open:
+            # Run the command
+            ProfileDeleteValueCommand._run(mock_cli)
+
+            mock_log_error.assert_not_called()
+
+            # Ensure the file was written correctly
+            mocked_open.assert_called_once_with(profile_path, "w")
+            handle = mocked_open()
+
+            # Aggregate the write calls
+            written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+            expected_data = yaml.safe_dump({"profile": {"name": None}})
+            assert written_data == expected_data
+
+        # Check that log_info was called
+        mock_log_info.assert_called_once_with(
+            f"Variable profile.name was removed from profile {mock_cli.config.profile.name}"
+        )
+
+        mock_log_warning.assert_not_called()
+        mock_log_error.assert_not_called()
+        mock_log_error_with_exception.assert_not_called()
 
 
 def test_profile_show_command_format(mock_cli):

@@ -31,6 +31,7 @@ import argparse
 
 import bittensor
 from .utils.data import flatten_dict, unflatten_dict_to_munch
+from .utils.logger import log_warning
 
 
 class InvalidConfigFile(Exception):
@@ -532,7 +533,8 @@ class config(DefaultMunch):
         else:
             # Maybe we should raise an error here, but for now, I think it's ok if we skip
             # the loading and just print a message
-            print(f"Profile file for profile {profile_name} not found.")
+            log_warning(f"Profile file for profile {profile_name} not found.")
+
             return
 
         with open(profile_file, "r") as file:

@@ -202,6 +202,7 @@ class ProfileListCommand:
             pad_edge=True,
             box=None,
             show_edge=True,
+            title_justify="left",
         )
         table.title = "[white]Profiles"
         table.add_column("Active", style="red", justify="center", min_width=1)
@@ -252,6 +253,7 @@ class ProfileShowCommand:
             pad_edge=True,
             box=None,
             show_edge=True,
+            title_justify="left",
         )
         table.title = f"[white]Profile [bold white]{config.profile.name}"
         table.add_column(
@@ -312,10 +314,15 @@ class ProfileDeleteCommand:
             return
 
         try:
-            os.remove(profile_path)
-            log_info(
-                f"Profile {config.profile.name} deleted from {os.path.expanduser(config.profile.path)}"
+            delete = Prompt.ask(
+                f"Are you sure you want to delete profile {config.profile.name}? Default: [bold]n[/bold] (y/n)"
             )
+
+            if delete.lower() == "y":
+                os.remove(profile_path)
+                log_info(
+                    f"Profile {config.profile.name} deleted from {os.path.expanduser(config.profile.path)}"
+                )
         except Exception as e:
             log_error_with_exception("Failed to delete profile", e)
 
@@ -450,10 +457,17 @@ class ProfileDeleteValueCommand:
         for arg in values:
             key = arg
             if flatten_contents.__contains__(key):
-                del flatten_contents[key]
-                log_info(
-                    f"Variable {key} was removed from profile {config.profile.name}"
+                delete = Prompt.ask(
+                    f"Are you sure you want to delete variable {key} from profile {config.profile.name}? Default: ["
+                    f"bold]n[/bold] (y/n)"
                 )
+
+                if delete.lower() == "y":
+                    del flatten_contents[key]
+                    log_info(
+                        f"Variable {key} was removed from profile {config.profile.name}"
+                    )
+
             else:
                 log_warning(
                     f"Variable {key} does not exist in profile {config.profile.name}"
