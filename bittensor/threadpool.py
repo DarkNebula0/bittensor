@@ -17,6 +17,7 @@ import bittensor
 import itertools
 import threading
 
+from munch import Munch, munchify
 from typing import Callable
 from concurrent.futures import _base
 
@@ -170,41 +171,39 @@ class PriorityThreadPoolExecutor(_base.Executor):
         """Accept specific arguments from parser"""
         prefix_str = "" if prefix == None else prefix + "."
         try:
-            default_max_workers = (
-                os.getenv("BT_PRIORITY_MAX_WORKERS")
-                if os.getenv("BT_PRIORITY_MAX_WORKERS") != None
-                else 5
-            )
-            default_maxsize = (
-                os.getenv("BT_PRIORITY_MAXSIZE")
-                if os.getenv("BT_PRIORITY_MAXSIZE") != None
-                else 10
-            )
+            config = cls.config()
             parser.add_argument(
                 "--" + prefix_str + "priority.max_workers",
                 type=int,
                 help="""maximum number of threads in thread pool""",
-                default=default_max_workers,
+                default=config.priority.max_workers,
             )
             parser.add_argument(
                 "--" + prefix_str + "priority.maxsize",
                 type=int,
                 help="""maximum size of tasks in priority queue""",
-                default=default_maxsize,
+                default=config.priority.maxsize,
             )
         except argparse.ArgumentError:
             # re-parsing arguments.
             pass
 
     @classmethod
-    def config(cls) -> "bittensor.config":
-        """Get config from the argument parser.
-
-        Return: :func:`bittensor.config` object.
+    def config(cls) -> Munch:
         """
-        parser = argparse.ArgumentParser()
-        PriorityThreadPoolExecutor.add_args(parser)
-        return bittensor.config(parser, args=[])
+        Get config from the thread pool defaults.
+
+        Returns:
+            Munch: Config object containing thread pool defaults.
+        """
+        return munchify(
+            {
+                "priority": {
+                    "max_workers": 5,
+                    "maxsize": 10,
+                }
+            }
+        )
 
     @property
     def is_empty(self):

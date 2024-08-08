@@ -21,6 +21,7 @@ import os
 import copy
 import argparse
 import bittensor
+from munch import Munch, munchify
 from termcolor import colored
 from substrateinterface import Keypair
 from typing import Optional, Union, Tuple, Dict, overload
@@ -108,16 +109,22 @@ class wallet:
     """
 
     @classmethod
-    def config(cls) -> "bittensor.config":
+    def config(cls) -> Munch:
         """
-        Get config from the argument parser.
+        Get config from the wallet defaults.
 
         Returns:
-            bittensor.config: Config object.
+            Munch: Config object containing wallet defaults.
         """
-        parser = argparse.ArgumentParser()
-        cls.add_args(parser)
-        return bittensor.config(parser, args=[])
+        return munchify(
+            {
+                "wallet": {
+                    "name": "default",
+                    "hotkey": "default",
+                    "path": "~/.bittensor/wallets/",
+                }
+            }
+        )
 
     @classmethod
     def help(cls):
@@ -139,10 +146,9 @@ class wallet:
             prefix (str): Argument prefix.
         """
         prefix_str = "" if prefix == None else prefix + "."
+        config = cls.config()
+
         try:
-            default_name = os.getenv("BT_WALLET_NAME") or "default"
-            default_hotkey = os.getenv("BT_WALLET_NAME") or "default"
-            default_path = os.getenv("BT_WALLET_PATH") or "~/.bittensor/wallets/"
             parser.add_argument(
                 "--no_prompt",
                 dest="no_prompt",
@@ -153,20 +159,20 @@ class wallet:
             parser.add_argument(
                 "--" + prefix_str + "wallet.name",
                 required=False,
-                default=default_name,
+                default=config.wallet.name,
                 help="The name of the wallet to unlock for running bittensor "
                 "(name mock is reserved for mocking this wallet)",
             )
             parser.add_argument(
                 "--" + prefix_str + "wallet.hotkey",
                 required=False,
-                default=default_hotkey,
+                default=config.wallet.hotkey,
                 help="The name of the wallet's hotkey.",
             )
             parser.add_argument(
                 "--" + prefix_str + "wallet.path",
                 required=False,
-                default=default_path,
+                default=config.wallet.path,
                 help="The path to your bittensor wallets",
             )
         except argparse.ArgumentError as e:
@@ -192,15 +198,10 @@ class wallet:
         if config is None:
             config = wallet.config()
         self.config = copy.deepcopy(config)
-        self.config.wallet.name = name or self.config.wallet.get(
-            "name", bittensor.defaults.wallet.name
-        )
-        self.config.wallet.hotkey = hotkey or self.config.wallet.get(
-            "hotkey", bittensor.defaults.wallet.hotkey
-        )
-        self.config.wallet.path = path or self.config.wallet.get(
-            "path", bittensor.defaults.wallet.path
-        )
+
+        self.config.wallet.name = name or self.config.wallet.get("name")
+        self.config.wallet.hotkey = hotkey or self.config.wallet.get("hotkey")
+        self.config.wallet.path = path or self.config.wallet.get("path")
 
         self.name = self.config.wallet.name
         self.path = self.config.wallet.path

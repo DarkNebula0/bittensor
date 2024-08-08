@@ -26,6 +26,7 @@ import copy
 import functools
 import socket
 import time
+from munch import Munch, munchify
 from typing import List, Dict, Union, Optional, Tuple, TypedDict, Any
 
 import numpy as np
@@ -300,17 +301,22 @@ class Subtensor:
         return self.__str__()
 
     @staticmethod
-    def config() -> "bittensor.config":
+    def config() -> Munch:
         """
-        Creates and returns a Bittensor configuration object.
+        Get config from the subtensor defaults.
 
         Returns:
-            config (bittensor.config): A Bittensor configuration object configured with arguments added by the
-                `subtensor.add_args` method.
+            Munch: Config object containing subtensor defaults.
         """
-        parser = argparse.ArgumentParser()
-        Subtensor.add_args(parser)
-        return bittensor.config(parser, args=[])
+        return munchify(
+            {
+                "subtensor": {
+                    "network": bittensor.__networks__[1],
+                    "chain_endpoint": bittensor.__finney_entrypoint__,
+                    "_mock": False,
+                }
+            }
+        )
 
     @classmethod
     def help(cls):
@@ -342,12 +348,11 @@ class Subtensor:
         """
         prefix_str = "" if prefix is None else f"{prefix}."
         try:
-            default_network = bittensor.__networks__[1]
-            default_chain_endpoint = bittensor.__finney_entrypoint__
+            config = cls.config()
 
             parser.add_argument(
                 f"--{prefix_str}subtensor.network",
-                default=default_network,
+                default=config.subtensor.network,
                 type=str,
                 help="""The subtensor network flag. The likely choices are:
                                         -- finney (main network)
@@ -360,13 +365,13 @@ class Subtensor:
             )
             parser.add_argument(
                 f"--{prefix_str}subtensor.chain_endpoint",
-                default=default_chain_endpoint,
+                default=config.subtensor.chain_endpoint,
                 type=str,
                 help="""The subtensor endpoint flag. If set, overrides the --network flag.""",
             )
             parser.add_argument(
                 f"--{prefix_str}subtensor._mock",
-                default=False,
+                default=config.subtensor.get("_mock"),
                 type=bool,
                 help="""If true, uses a mocked connection to the chain.""",
             )
@@ -3158,7 +3163,9 @@ class Subtensor:
         """
         call_definition = bittensor.__type_registry__["runtime_api"][runtime_api][  # type: ignore
             "methods"  # type: ignore
-        ][method]  # type: ignore
+        ][
+            method
+        ]  # type: ignore
 
         json_result = self.state_call(
             method=f"{runtime_api}_{method}",

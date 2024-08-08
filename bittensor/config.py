@@ -29,6 +29,10 @@ from munch import DefaultMunch
 from typing import List, Optional, Dict, Any, TypeVar, Type
 import argparse
 
+import bittensor
+from .utils.data import flatten_dict, unflatten_dict_to_munch
+from .utils.logger import log_warning
+
 
 class InvalidConfigFile(Exception):
     """In place of YAMLError"""
@@ -42,6 +46,10 @@ class config(DefaultMunch):
     """
 
     __is_set: Dict[str, bool]
+    env_config: Dict[str, Any] = {}
+    generic_config: Dict[str, Any] = {}
+    params_config: Dict[str, Any] = {}
+    profile_config: Dict[str, Any] = {}
 
     r""" Translates the passed parser into a nested Bittensor config.
     
@@ -142,7 +150,7 @@ class config(DefaultMunch):
             config_file_path = None
 
         # Parse args not strict
-        config_params = config.__parse_args__(args=args, parser=parser, strict=False)
+        config_params = self.__parse_args__(args=args, parser=parser, strict=False)
 
         # 2. Optionally check for --strict
         ## strict=True when passed in OR when --strict is set
@@ -159,7 +167,7 @@ class config(DefaultMunch):
                 print("Error in loading: {} using default parser settings".format(e))
 
         # 2. Continue with loading in params.
-        params = config.__parse_args__(args=args, parser=parser, strict=strict)
+        params = self.__parse_args__(args=args, parser=parser, strict=strict)
 
         _config = self
 
@@ -183,7 +191,6 @@ class config(DefaultMunch):
 
         ## Get all args by name
         default_params = parser.parse_args(args=default_param_args)
-
         all_default_args = default_params.__dict__.keys() | []
         ## Make a dict with keys as args and values as argparse.SUPPRESS
         defaults_as_suppress = {key: argparse.SUPPRESS for key in all_default_args}
@@ -215,21 +222,64 @@ class config(DefaultMunch):
                             cmd_parser._defaults.clear()  # Needed for quirk of argparse
 
         ## Reparse the args, but this time with the defaults as argparse.SUPPRESS
-        params_no_defaults = config.__parse_args__(
+        params_no_defaults = self.__parse_args__(
             args=args, parser=parser_no_defaults, strict=strict
         )
 
-        ## Diff the params and params_no_defaults to get the is_set map
-        _config["__is_set"] = {
-            arg_key: True
-            for arg_key in [
-                k
-                for k, _ in filter(
-                    lambda kv: kv[1] != argparse.SUPPRESS,
-                    params_no_defaults.__dict__.items(),
-                )
-            ]
+        config_defaults = flatten_dict(
+            {
+                "profile": {"path": "~/.bittensor/profiles/"},
+                "config": {"path": "~/.bittensor/"},
+            }
+        )
+
+        # Load config from environment variables and merge with defaults values
+        self.load_config_from_env_vars()
+
+        tmp_config = {
+            **config_defaults,
+            **self.env_config,
+            **flatten_dict(params_no_defaults.__dict__),
+            **self.params_config,
         }
+
+        # Load or create generic config
+        self.load_generic_config(tmp_config.get("config.path"))
+
+        # Load active profile if we have one
+        self.load_active_profile(tmp_config.get("profile.path"))
+
+        # Merge all the configs overwrite order is -> defaults -> generic -> profile -> env -> params
+        tmp_config = {
+            **flatten_dict(bittensor.defaults.__dict__),
+            **flatten_dict(default_params.__dict__),
+            **self.generic_config,
+            **self.profile_config,
+            **self.env_config,
+            **flatten_dict(params_no_defaults.__dict__),
+            **self.params_config,
+        }
+
+        # Unflatten the tmp_config and merge it with the current config
+        self.merge(unflatten_dict_to_munch(tmp_config))
+
+        # Build the is_set map
+        flatten_config = flatten_dict(self.__dict__)
+        tmp_is_set = {}
+
+        for key, _ in flatten_config.items():
+            # If the key exists in the config we set it initially
+            # to True because we have a value and something must have been set
+            tmp_is_set[key] = True
+
+        flat_defaults = flatten_dict(default_params.__dict__)
+        for key, val in flat_defaults.items():
+            # We check if the value in the config is still the default value if yes we set it to False (We do this to
+            # check if the value has been set by the user and when not the command can switch to interactive mode)
+            if key in tmp_is_set and val == flatten_config[key]:
+                tmp_is_set[key] = False
+
+        _config["__is_set"] = tmp_is_set
 
     @staticmethod
     def __split_params__(params: argparse.Namespace, _config: "config"):
@@ -251,9 +301,11 @@ class config(DefaultMunch):
             if len(keys) == 1:
                 head[keys[0]] = arg_val
 
-    @staticmethod
     def __parse_args__(
-        args: List[str], parser: argparse.ArgumentParser = None, strict: bool = False
+        self,
+        args: List[str],
+        parser: argparse.ArgumentParser = None,
+        strict: bool = False,
     ) -> argparse.Namespace:
         """Parses the passed args use the passed parser.
 
@@ -268,6 +320,7 @@ class config(DefaultMunch):
             Namespace:
                 Namespace object created from parser arguments.
         """
+
         if not strict:
             params, unrecognized = parser.parse_known_args(args=args)
             params_list = list(params.__dict__)
@@ -276,6 +329,16 @@ class config(DefaultMunch):
                 if unrec.startswith("--") and unrec[2:] in params_list:
                     # Set the missing boolean value to true
                     setattr(params, unrec[2:], True)
+                else:
+                    # Add unrecognized arguments to the config
+                    # maybe we should think about a better way to handle this for now we can override every config
+                    if unrec.startswith("--"):
+                        if "=" in unrec[2:]:
+                            key, value = unrec[2:].split("=")
+                        else:
+                            key = unrec[2:]
+                            value = True
+                        self.params_config[key] = value
         else:
             params = parser.parse_args(args=args)
 
@@ -334,6 +397,11 @@ class config(DefaultMunch):
         """Merge two configurations recursively.
         If there is a conflict, the value from the second configuration will take precedence.
         """
+        if a is None:
+            a = {}
+        if b is None:
+            return a
+
         for key in b:
             if key in a:
                 if isinstance(a[key], dict) and isinstance(b[key], dict):
@@ -397,6 +465,84 @@ class config(DefaultMunch):
                 prefix = "--" if len(action.dest) > 1 else "-"
                 required_args.append(prefix + action.dest)
         return required_args
+
+    def load_config_from_env_vars(self):
+        """
+        Store the key-value pairs from environment variables starting with BT_ in env_config.
+        The environment variable names are converted to nested dictionary keys.
+        The conversion involves:
+        - Removing the "BT_" prefix
+        - Converting the remaining characters to lowercase
+        - Replacing double underscores (__) with underscores (_)
+        - Replacing single underscores (_) with dots (.)
+
+        Example:
+        BT_LOGGING_LOGGING__DIR would become logging.logging_dir
+        """
+        env_vars = {k: v for k, v in os.environ.items() if k.startswith("BT_")}
+        for var, value in env_vars.items():
+            key = var[3:].lower()
+            key = key.replace("__", "_").replace("_", ".")
+            self.env_config[key] = value
+            # TODO: We need to talk about backwards compatibility here. The old environments were inconsistent and in
+            #  some places '_' would be resolved to '_' and in others to '.' Example: BT_LOGGING_LOGGING_DIR would
+            #  become logging.logging_dir but with this generic approach it would be logging.logging.dir So we would
+            #  need to introduce this breaking change, and variables like BT_LOGGING_LOGGING_DIR would become
+            #  BT_LOGGING_LOGGING__DIR
+
+    def load_generic_config(self, config_path=None):
+        if config_path is None:
+            return
+
+        config_file_yml = os.path.join(config_path, "btcliconfig.yml")
+
+        config_file = None
+        config_data = {}
+
+        if os.path.exists(config_file_yml):
+            config_file = config_file_yml
+
+        if config_file:
+            with open(config_file, "r") as file:
+                config_data = yaml.safe_load(file)
+
+        if config_data:
+            self.generic_config = flatten_dict(config_data)
+
+    def load_active_profile(self, profile_path=None):
+        if not profile_path:
+            return
+
+        profile_name_holder = os.path.expanduser(
+            os.path.join(profile_path, ".btcliprofile")
+        )
+
+        if not os.path.exists(profile_name_holder):
+            # No profile is active, so we can skip loading the profile
+            return
+
+        with open(profile_name_holder, "r") as file:
+            profile_name = file.read().strip()
+
+        profile_file_yml = os.path.expanduser(
+            os.path.join(profile_path, f"{profile_name}.yml")
+        )
+
+        if os.path.exists(profile_file_yml):
+            profile_file = profile_file_yml
+        else:
+            # Maybe we should raise an error here, but for now, I think it's ok if we skip
+            # the loading and just print a message
+            log_warning(f"Profile file for profile {profile_name} not found.")
+
+            return
+
+        with open(profile_file, "r") as file:
+            profile_data = yaml.safe_load(file)
+            profile_data["profile.active"] = profile_name
+
+        if profile_data:
+            self.profile_config = flatten_dict(profile_data)
 
 
 T = TypeVar("T", bound="DefaultConfig")

@@ -35,6 +35,13 @@ from .commands import (
     NewHotkeyCommand,
     NominateCommand,
     OverviewCommand,
+    ProfileCreateCommand,
+    ProfileListCommand,
+    ProfileShowCommand,
+    ProfileDeleteCommand,
+    ProfileSetValueCommand,
+    ProfileDeleteValueCommand,
+    ProfileUseCommand,
     PowRegisterCommand,
     ProposalsCommand,
     RegenColdkeyCommand,
@@ -98,6 +105,8 @@ ALIAS_TO_COMMAND = {
     "weights": "weights",
     "wt": "weights",
     "weight": "weights",
+    "profile": "profile",
+    "p": "profile"
 }
 COMMANDS = {
     "subnets": {
@@ -205,6 +214,20 @@ COMMANDS = {
         "help": "Instructions for enabling autocompletion for the CLI.",
         "commands": {
             "autocomplete": AutocompleteCommand,
+        },
+    },
+    "profile": {
+        "name": "profile",
+        "aliases": ["p"],
+        "help": "Commands for creating and viewing profiles.",
+        "commands": {
+            "create": ProfileCreateCommand,
+            "list": ProfileListCommand,
+            "show": ProfileShowCommand,
+            "use": ProfileUseCommand,
+            "set_value": ProfileSetValueCommand,
+            "delete_value": ProfileDeleteValueCommand,
+            "delete": ProfileDeleteCommand,
         },
     },
 }
@@ -374,6 +397,7 @@ class cli:
         # Check if command exists, if so, run the corresponding method.
         # If command doesn't exist, inform user and exit the program.
         command = self.config.command
+
         if command in COMMANDS:
             command_data = COMMANDS[command]
 

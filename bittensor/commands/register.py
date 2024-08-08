@@ -21,7 +21,6 @@ import bittensor
 from rich.prompt import Prompt, Confirm
 from .utils import check_netuid_set, check_for_cuda_reg_config
 from copy import deepcopy
-
 from . import defaults
 
 console = bittensor.__console__
