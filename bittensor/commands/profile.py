@@ -119,7 +119,7 @@ class ProfileCreateCommand:
             log_error_with_exception("Failed to write profile", e)
             return
 
-        profile_file = f"{path}{config.profile.name}.yml"
+        profile_file = os.path.join(path, f"{config.profile.name}.yml")
         if os.path.exists(profile_file) and not config.no_prompt:
             overwrite = None
             while overwrite not in ["y", "n"]:
